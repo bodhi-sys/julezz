@@ -107,25 +107,29 @@ async fn main() {
             SessionsCommands::List => {
                 match client.list_sessions().await {
                     Ok(sessions) => {
-                        println!("{}", "Available sessions:".bold());
-                        for session in sessions {
-                            let state = match session.state.as_str() {
-                                "ACTIVE" => session.state.green(),
-                                "COMPLETED" => session.state.blue(),
-                                _ => session.state.yellow(),
-                            };
-                            println!("- {}: {}", session.id.bold(), session.name);
-                            if let Some(source_context) = session.source_context {
-                                if let Some(git_source) = source_context.git_source {
-                                    println!(
-                                        "  {} {}/{}",
-                                        "Repo:".dimmed(),
-                                        git_source.repo,
-                                        git_source.branch.cyan()
-                                    );
+                        println!("{}", "Jules Sessions".bold().underline());
+                        if sessions.is_empty() {
+                            println!("No sessions found.");
+                        } else {
+                            for session in sessions {
+                                let state = match session.state.as_str() {
+                                    "ACTIVE" => session.state.green(),
+                                    "COMPLETED" => session.state.blue(),
+                                    _ => session.state.yellow(),
+                                };
+                                println!("\n- {}: {}", session.id.bold(), session.name);
+                                if let Some(source_context) = session.source_context {
+                                    if let Some(git_source) = source_context.git_source {
+                                        println!(
+                                            "  {} {}/{}",
+                                            "Repo:".dimmed(),
+                                            git_source.repo,
+                                            git_source.branch.cyan()
+                                        );
+                                    }
                                 }
+                                println!("  {}: {}", "State".dimmed(), state);
                             }
-                            println!("  {}: {}", "State".dimmed(), state);
                         }
                     }
                     Err(e) => {
