@@ -106,29 +106,41 @@ async fn main() {
         Commands::Sessions { command } => match command {
             SessionsCommands::List => {
                 match client.list_sessions().await {
-                    Ok(sessions) => {
+                    Ok(sessions_list) => {
                         println!("{}", "Jules Sessions".bold().underline());
-                        if sessions.is_empty() {
+                        if sessions_list.is_empty() {
                             println!("No sessions found.");
                         } else {
-                            for session in sessions {
-                                let state = match session.state.as_str() {
-                                    "ACTIVE" => session.state.green(),
-                                    "COMPLETED" => session.state.blue(),
-                                    _ => session.state.yellow(),
-                                };
-                                println!("\n- {}: {}", session.id.bold(), session.name);
-                                if let Some(source_context) = session.source_context {
-                                    if let Some(git_source) = source_context.git_source {
-                                        println!(
-                                            "  {} {}/{}",
-                                            "Repo:".dimmed(),
-                                            git_source.repo,
-                                            git_source.branch.cyan()
+                            for session_summary in sessions_list {
+                                match client.get_session(&session_summary.id).await {
+                                    Ok(session) => {
+                                        let state = match session.state.as_str() {
+                                            "ACTIVE" => session.state.green(),
+                                            "COMPLETED" => session.state.blue(),
+                                            _ => session.state.yellow(),
+                                        };
+                                        println!("\n- {}: {}", session.id.bold(), session.name);
+                                        if let Some(source_context) = session.source_context {
+                                            if let Some(git_source) = source_context.git_source {
+                                                println!(
+                                                    "  {} {}/{}",
+                                                    "Repo:".dimmed(),
+                                                    git_source.repo,
+                                                    git_source.branch.cyan()
+                                                );
+                                            }
+                                        }
+                                        println!("  {}: {}", "State".dimmed(), state);
+                                    }
+                                    Err(e) => {
+                                        eprintln!(
+                                            "{} Could not fetch details for session {}",
+                                            "Error:".red(),
+                                            session_summary.id
                                         );
+                                        handle_error(e);
                                     }
                                 }
-                                println!("  {}: {}", "State".dimmed(), state);
                             }
                         }
                     }
