@@ -15,10 +15,24 @@ struct ListSourcesResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct SourceContext {
+    #[serde(rename = "gitSource")]
+    pub git_source: Option<GitSource>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GitSource {
+    pub repo: String,
+    pub branch: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Session {
     pub name: String,
     pub id: String,
     pub state: String,
+    #[serde(rename = "sourceContext")]
+    pub source_context: Option<SourceContext>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
