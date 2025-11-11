@@ -16,8 +16,11 @@ struct Args {
 
 #[derive(clap::Subcommand, Debug)]
 enum Commands {
-    /// List available sources
-    Sources,
+    /// Manage sources
+    Sources {
+        #[command(subcommand)]
+        command: SourcesCommands,
+    },
     /// Manage sessions
     Sessions {
         #[command(subcommand)]
@@ -27,6 +30,17 @@ enum Commands {
     Activities {
         #[command(subcommand)]
         command: ActivitiesCommands,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum SourcesCommands {
+    /// List sources
+    List,
+    /// Get a source
+    Get {
+        /// The ID of the source to get
+        id: String,
     },
 }
 
@@ -90,19 +104,32 @@ async fn main() {
     };
 
     match args.command {
-        Commands::Sources => {
-            match client.list_sources().await {
-                Ok(sources) => {
-                    println!("Available sources:");
-                    for source in sources {
-                        println!("- {}: {}", source.id, source.name);
+        Commands::Sources { command } => match command {
+            SourcesCommands::List => {
+                match client.list_sources().await {
+                    Ok(sources) => {
+                        println!("Available sources:");
+                        for source in sources {
+                            println!("- {}: {}", source.id, source.name);
+                        }
+                    }
+                    Err(e) => {
+                        handle_error(e);
                     }
                 }
-                Err(e) => {
-                    handle_error(e);
+            }
+            SourcesCommands::Get { id } => {
+                match client.get_source(&id).await {
+                    Ok(source) => {
+                        println!("Source:");
+                        println!("- {}: {}", source.id, source.name);
+                    }
+                    Err(e) => {
+                        handle_error(e);
+                    }
                 }
             }
-        }
+        },
         Commands::Sessions { command } => match command {
             SessionsCommands::List => {
                 match client.list_sessions().await {
@@ -258,8 +285,9 @@ mod tests {
             "--api-key",
             "test-key",
             "sources",
+            "list",
         ]);
         assert_eq!(args.api_key, Some("test-key".to_string()));
-        assert!(matches!(args.command, Commands::Sources));
+        assert!(matches!(args.command, Commands::Sources { .. }));
     }
 }

@@ -139,6 +139,17 @@ impl JulesClient {
         Ok(list_response.sources)
     }
 
+    pub async fn get_source(&self, id: &str) -> Result<Source, JulesError> {
+        let url = format!("{}/sources/{}", API_BASE_URL, id);
+        let response = self
+            .client
+            .get(&url)
+            .header("x-goog-api-key", &self.api_key)
+            .send()
+            .await?;
+        self.handle_response(response).await
+    }
+
     pub async fn list_sessions(&self) -> Result<Vec<Session>, JulesError> {
         let url = format!("{}/sessions", API_BASE_URL);
         let response = self
