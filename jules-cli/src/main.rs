@@ -75,16 +75,14 @@ enum SessionsCommands {
 
 #[derive(clap::Subcommand, Debug)]
 enum ActivitiesCommands {
-    /// List activities
+    /// List activities for a session
     List {
-        /// The ID of the session to list activities for
-        #[arg(short, long)]
+        /// The ID of the session
         session_id: String,
     },
-    /// Get an activity
+    /// Get a specific activity from a session
     Get {
         /// The ID of the session
-        #[arg(short, long)]
         session_id: String,
         /// The ID of the activity to get
         id: String,
