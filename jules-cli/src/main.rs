@@ -68,8 +68,8 @@ enum SessionsCommands {
     SendMessage {
         /// The ID of the session to send the message to
         id: String,
-        /// The message to send
-        message: String,
+        /// The prompt to send
+        prompt: String,
     },
 }
 
@@ -138,37 +138,25 @@ async fn main() {
                         if sessions_list.is_empty() {
                             println!("No sessions found.");
                         } else {
-                            for session_summary in sessions_list {
-                                match client.get_session(&session_summary.id).await {
-                                    Ok(session) => {
-                                        let state = match session.state.as_str() {
-                                            "ACTIVE" => session.state.green(),
-                                            "COMPLETED" => session.state.blue(),
-                                            _ => session.state.yellow(),
-                                        };
-                                        println!("\n- {}: {}", session.id.bold(), session.title);
-                                        if let Some(source_context) = session.source_context {
-                                            if let Some(repo_context) = source_context.github_repo_context {
-                                                let repo_name = source_context.source.replace("sources/github/", "");
-                                                println!(
-                                                    "  {} {}/{}",
-                                                    "Repo:".dimmed(),
-                                                    repo_name,
-                                                    repo_context.starting_branch.cyan()
-                                                );
-                                            }
-                                        }
-                                        println!("  {}: {}", "State".dimmed(), state);
-                                    }
-                                    Err(e) => {
-                                        eprintln!(
-                                            "{} Could not fetch details for session {}",
-                                            "Error:".red(),
-                                            session_summary.id
+                            for session in sessions_list {
+                                let state = match session.state.as_str() {
+                                    "ACTIVE" => session.state.green(),
+                                    "COMPLETED" => session.state.blue(),
+                                    _ => session.state.yellow(),
+                                };
+                                println!("\n- {}: {}", session.id.bold(), session.title);
+                                if let Some(source_context) = session.source_context {
+                                    if let Some(repo_context) = source_context.github_repo_context {
+                                        let repo_name = source_context.source.replace("sources/github/", "");
+                                        println!(
+                                            "  {} {}/{}",
+                                            "Repo:".dimmed(),
+                                            repo_name,
+                                            repo_context.starting_branch.cyan()
                                         );
-                                        handle_error(e);
                                     }
                                 }
+                                println!("  {}: {}", "State".dimmed(), state);
                             }
                         }
                     }
@@ -204,8 +192,8 @@ async fn main() {
                     handle_error(e);
                 }
             }
-            SessionsCommands::SendMessage { id, message } => {
-                if let Err(e) = client.send_message(&id, &message).await {
+            SessionsCommands::SendMessage { id, prompt } => {
+                if let Err(e) = client.send_message(&id, &prompt).await {
                     handle_error(e);
                 }
             }

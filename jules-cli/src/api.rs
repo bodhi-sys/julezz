@@ -204,13 +204,13 @@ impl JulesClient {
         Ok(())
     }
 
-    pub async fn send_message(&self, id: &str, message: &str) -> Result<(), JulesError> {
+    pub async fn send_message(&self, id: &str, prompt: &str) -> Result<(), JulesError> {
         let url = format!("{}/sessions/{}:sendMessage", API_BASE_URL, id);
         let response = self
             .client
             .post(&url)
             .header("x-goog-api-key", &self.api_key)
-            .json(&serde_json::json!({ "message": message }))
+            .json(&serde_json::json!({ "prompt": prompt }))
             .send()
             .await?;
         if !response.status().is_success() {
