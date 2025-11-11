@@ -119,14 +119,15 @@ async fn main() {
                                             "COMPLETED" => session.state.blue(),
                                             _ => session.state.yellow(),
                                         };
-                                        println!("\n- {}: {}", session.id.bold(), session.name);
+                                        println!("\n- {}: {}", session.id.bold(), session.title);
                                         if let Some(source_context) = session.source_context {
-                                            if let Some(git_source) = source_context.git_source {
+                                            if let Some(repo_context) = source_context.github_repo_context {
+                                                let repo_name = source_context.source.replace("sources/github/", "");
                                                 println!(
                                                     "  {} {}/{}",
                                                     "Repo:".dimmed(),
-                                                    git_source.repo,
-                                                    git_source.branch.cyan()
+                                                    repo_name,
+                                                    repo_context.starting_branch.cyan()
                                                 );
                                             }
                                         }

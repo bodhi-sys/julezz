@@ -16,14 +16,15 @@ struct ListSourcesResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SourceContext {
-    #[serde(rename = "gitSource")]
-    pub git_source: Option<GitSource>,
+    pub source: String,
+    #[serde(rename = "githubRepoContext")]
+    pub github_repo_context: Option<GithubRepoContext>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct GitSource {
-    pub repo: String,
-    pub branch: String,
+#[serde(rename_all = "camelCase")]
+pub struct GithubRepoContext {
+    pub starting_branch: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,6 +32,7 @@ pub struct Session {
     pub name: String,
     pub id: String,
     pub state: String,
+    pub title: String,
     #[serde(rename = "sourceContext")]
     pub source_context: Option<SourceContext>,
 }
