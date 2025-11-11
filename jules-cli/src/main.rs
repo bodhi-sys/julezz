@@ -201,6 +201,8 @@ async fn main() {
                             );
                             if let Some(agent_messaged) = activity.agent_messaged {
                                 println!("  {}", agent_messaged.agent_message);
+                            } else if let Some(user_messaged) = activity.user_messaged {
+                                println!("  {}", user_messaged.user_message);
                             } else if let Some(title) = activity.title {
                                 println!("  {}", title);
                             }

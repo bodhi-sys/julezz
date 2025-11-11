@@ -51,6 +51,13 @@ pub struct Activity {
     pub create_time: String,
     pub originator: String,
     pub agent_messaged: Option<AgentMessaged>,
+    pub user_messaged: Option<UserMessaged>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserMessaged {
+    pub user_message: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
