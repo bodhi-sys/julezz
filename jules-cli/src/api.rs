@@ -52,6 +52,14 @@ pub struct Activity {
     pub originator: String,
     pub agent_messaged: Option<AgentMessaged>,
     pub user_messaged: Option<UserMessaged>,
+    pub progress_updated: Option<ProgressUpdated>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgressUpdated {
+    pub title: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

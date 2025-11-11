@@ -202,11 +202,23 @@ async fn main() {
                             if let Some(agent_messaged) = activity.agent_messaged {
                                 if !agent_messaged.agent_message.is_empty() {
                                     println!("  {}", agent_messaged.agent_message);
+                                } else if let Some(progress) = activity.progress_updated {
+                                    if let Some(description) = &progress.description {
+                                        println!("  {}\n    {}", progress.title.dimmed(), description.dimmed());
+                                    } else {
+                                        println!("  {}", progress.title.dimmed());
+                                    }
                                 } else if let Some(title) = activity.title {
                                     println!("  {}", title.dimmed());
                                 }
                             } else if let Some(user_messaged) = activity.user_messaged {
                                 println!("  {}", user_messaged.user_message);
+                            } else if let Some(progress) = activity.progress_updated {
+                                if let Some(description) = &progress.description {
+                                    println!("  {}\n    {}", progress.title.dimmed(), description.dimmed());
+                                } else {
+                                    println!("  {}", progress.title.dimmed());
+                                }
                             } else if let Some(title) = activity.title {
                                 println!("  {}", title.dimmed());
                             }
