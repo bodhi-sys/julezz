@@ -187,9 +187,24 @@ async fn main() {
             ActivitiesCommands::List { session_id } => {
                 match client.list_activities(&session_id).await {
                     Ok(activities) => {
-                        println!("Activities for session {}:", session_id);
+                        println!("{}\n", format!("Activities for session {}", session_id).bold().underline());
                         for activity in activities {
-                            println!("- {}: {}", activity.id, activity.name);
+                            let originator = match activity.originator.as_str() {
+                                "agent" => activity.originator.cyan(),
+                                "user" => activity.originator.green(),
+                                _ => activity.originator.dimmed(),
+                            };
+                            println!(
+                                "[{}] {}",
+                                activity.create_time.dimmed(),
+                                originator
+                            );
+                            if let Some(agent_messaged) = activity.agent_messaged {
+                                println!("  {}", agent_messaged.agent_message);
+                            } else if let Some(title) = activity.title {
+                                println!("  {}", title);
+                            }
+                            println!();
                         }
                     }
                     Err(e) => {

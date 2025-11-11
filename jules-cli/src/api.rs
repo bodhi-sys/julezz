@@ -43,10 +43,20 @@ struct ListSessionsResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Activity {
     pub name: String,
     pub id: String,
-    pub description: String,
+    pub title: Option<String>,
+    pub create_time: String,
+    pub originator: String,
+    pub agent_messaged: Option<AgentMessaged>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentMessaged {
+    pub agent_message: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
