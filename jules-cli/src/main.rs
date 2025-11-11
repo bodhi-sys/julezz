@@ -213,6 +213,8 @@ async fn main() {
                                 }
                             } else if let Some(user_messaged) = activity.user_messaged {
                                 println!("  {}", user_messaged.user_message);
+                            } else if activity.plan_approved.is_some() {
+                                println!("  {}", "Plan Approved".yellow());
                             } else if let Some(progress) = activity.progress_updated {
                                 if let Some(description) = &progress.description {
                                     println!("  {}\n    {}", progress.title.dimmed(), description.dimmed());

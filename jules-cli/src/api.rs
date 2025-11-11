@@ -53,7 +53,12 @@ pub struct Activity {
     pub agent_messaged: Option<AgentMessaged>,
     pub user_messaged: Option<UserMessaged>,
     pub progress_updated: Option<ProgressUpdated>,
+    pub plan_approved: Option<PlanApproved>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanApproved {}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
