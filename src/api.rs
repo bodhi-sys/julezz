@@ -64,7 +64,7 @@ pub struct PlanApproved {}
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ProgressUpdated {
-    pub title: String,
+    pub title: Option<String>,
     pub description: Option<String>,
 }
 

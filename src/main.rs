@@ -294,9 +294,9 @@ async fn main() {
                                             println!("  {}", agent_messaged.agent_message);
                                         } else if let Some(progress) = activity.progress_updated {
                                             if let Some(description) = &progress.description {
-                                                println!("  {}\n    {}", progress.title.dimmed(), description.dimmed());
+                                                println!("  {}\n    {}", progress.title.clone().unwrap_or_default().dimmed(), description.dimmed());
                                             } else {
-                                                println!("  {}", progress.title.dimmed());
+                                                println!("  {}", progress.title.clone().unwrap_or_default().dimmed());
                                             }
                                         } else if let Some(title) = activity.title {
                                             println!("  {}", title.dimmed());
@@ -307,9 +307,9 @@ async fn main() {
                                         println!("  {}", "Plan Approved".yellow());
                                     } else if let Some(progress) = activity.progress_updated {
                                         if let Some(description) = &progress.description {
-                                            println!("  {}\n    {}", progress.title.dimmed(), description.dimmed());
+                                            println!("  {}\n    {}", progress.title.clone().unwrap_or_default().dimmed(), description.dimmed());
                                         } else {
-                                            println!("  {}", progress.title.dimmed());
+                                            println!("  {}", progress.title.clone().unwrap_or_default().dimmed());
                                         }
                                     } else if let Some(title) = activity.title {
                                         println!("  {}", title.dimmed());
