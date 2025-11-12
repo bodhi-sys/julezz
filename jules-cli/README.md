@@ -53,32 +53,36 @@ jules-cli sessions create --source <SOURCE_ID>
 
 **Get a specific session:**
 
+First, run `sessions list` to see the available sessions and their indices. Then, use the index to get a specific session:
+
 ```bash
-jules-cli sessions get <SESSION_ID>
+jules-cli sessions get 1
 ```
 
 **Approve a plan for a session:**
 
 ```bash
-jules-cli sessions approve-plan <SESSION_ID>
+jules-cli sessions approve-plan 1
 ```
 
 **Send a message to a session:**
 
 ```bash
-jules-cli sessions send-message <SESSION_ID> "Your message here"
+jules-cli sessions send-message 1 "Your message here"
 ```
 
 ### Activities
 
 **List all activities for a session:**
 
+First, run `sessions list` to see the available sessions and their indices. Then, use the index to list the activities for a specific session:
+
 ```bash
-jules-cli activities list --session-id <SESSION_ID>
+jules-cli activities list 1
 ```
 
 **Get a specific activity:**
 
 ```bash
-jules-cli activities get --session-id <SESSION_ID> <ACTIVITY_ID>
+jules-cli activities get 1 <ACTIVITY_ID>
 ```
