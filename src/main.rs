@@ -1,6 +1,6 @@
 use clap::Parser;
 use colored::Colorize;
-use jules_cli::api::{handle_error, JulesClient};
+use julezz::api::{handle_error, JulesClient};
 use std::fs;
 
 fn get_session_id_from_index(index_str: &str) -> Result<String, String> {
@@ -276,6 +276,8 @@ async fn main() {
                                         .bold()
                                         .underline()
                                 );
+                                let mut activities = activities;
+                                activities.sort_by(|a, b| a.create_time.cmp(&b.create_time));
                                 for activity in activities {
                                     let originator = match activity.originator.as_str() {
                                         "agent" => activity.originator.cyan(),
