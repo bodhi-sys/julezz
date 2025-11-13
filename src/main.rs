@@ -1,8 +1,15 @@
 use clap::{CommandFactory, Parser};
 use colored::Colorize;
 use julezz::api::{handle_error, JulesClient};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
+
+#[derive(Serialize, Deserialize)]
+struct CachedSession {
+    id: String,
+    title: String,
+}
 
 fn get_session_id_from_index(index_str: &str) -> Result<String, String> {
     let index: usize = index_str.parse().map_err(|_| "Invalid index".to_string())?;
@@ -14,9 +21,9 @@ fn get_session_id_from_index(index_str: &str) -> Result<String, String> {
         let sessions_file = config_dir.join("julezz").join("sessions.json");
         if sessions_file.exists() {
             let data = fs::read_to_string(sessions_file).map_err(|_| "Could not read sessions file".to_string())?;
-            let session_ids: Vec<String> = serde_json::from_str(&data).map_err(|_| "Could not parse sessions file".to_string())?;
-            if let Some(session_id) = session_ids.get(index - 1) {
-                return Ok(session_id.clone());
+            let sessions: Vec<CachedSession> = serde_json::from_str(&data).map_err(|_| "Could not parse sessions file".to_string())?;
+            if let Some(session) = sessions.get(index - 1) {
+                return Ok(session.id.clone());
             }
         }
     }
@@ -63,6 +70,8 @@ enum Commands {
         /// The spec to generate
         spec: String,
     },
+    #[command(hide = true)]
+    ListCachedSessionsForCompletion,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -182,15 +191,20 @@ async fn main() {
                         if sessions_list.is_empty() {
                             println!("No sessions found.");
                         } else {
-                            let session_ids: Vec<String> =
-                                sessions_list.iter().map(|s| s.id.clone()).collect();
+                            let cached_sessions: Vec<CachedSession> = sessions_list
+                                .iter()
+                                .map(|s| CachedSession {
+                                    id: s.id.clone(),
+                                    title: s.title.clone(),
+                                })
+                                .collect();
                             if let Some(config_dir) = dirs::config_dir() {
                                 let jules_dir = config_dir.join("julezz");
                                 if let Err(e) = fs::create_dir_all(&jules_dir) {
                                     eprintln!("{} Could not create config directory: {}", "Error:".red(), e);
                                 } else {
                                     let sessions_file = jules_dir.join("sessions.json");
-                                    match serde_json::to_string(&session_ids) {
+                                    match serde_json::to_string(&cached_sessions) {
                                         Ok(json) => {
                                             if let Err(e) = fs::write(sessions_file, json) {
                                                 eprintln!("{} Could not write to sessions file: {}", "Error:".red(), e);
@@ -357,11 +371,41 @@ async fn main() {
         }
         Commands::__CarapaceSpec { .. } => {
             let cmd = Args::command();
-            let json_spec = command_to_json(&cmd);
-            println!("{}", serde_json::to_string(&json_spec).unwrap());
+            let mut spec = command_to_json(&cmd);
+            if let Some(commands) = spec["subcommands"].as_array_mut() {
+                for command in commands {
+                    if command["name"] == "sessions" {
+                        if let Some(subcommands) = command["subcommands"].as_array_mut() {
+                            for subcommand in subcommands {
+                                if let Some(args) = subcommand["arguments"].as_array_mut() {
+                                    for arg in args {
+                                        if arg["name"] == "index" {
+                                            arg["completion"] = serde_json::json!(["julezz", "list-cached-sessions-for-completion"]);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            println!("{}", serde_json::to_string(&spec).unwrap());
+        }
+        Commands::ListCachedSessionsForCompletion => {
+            if let Some(config_dir) = dirs::config_dir() {
+                let sessions_file = config_dir.join("julezz").join("sessions.json");
+                if sessions_file.exists() {
+                    let data = fs::read_to_string(sessions_file).unwrap();
+                    let sessions: Vec<CachedSession> = serde_json::from_str(&data).unwrap();
+                    for (i, session) in sessions.iter().enumerate() {
+                        println!("{}\t{}", i + 1, session.title);
+                    }
+                }
+            }
         }
     }
 }
+
 
 fn command_to_json(cmd: &clap::Command) -> serde_json::Value {
     let mut subcommands = Vec::new();
@@ -380,11 +424,20 @@ fn command_to_json(cmd: &clap::Command) -> serde_json::Value {
         }
     }
 
+    let mut arguments = Vec::new();
+    for arg in cmd.get_positionals() {
+        arguments.push(serde_json::json!({
+            "name": arg.get_id().to_string(),
+            "help": arg.get_help().map(|s| s.to_string()),
+        }));
+    }
+
     serde_json::json!({
         "name": cmd.get_name(),
         "about": cmd.get_about().map(|s| s.to_string()),
         "subcommands": subcommands,
         "flags": flags,
+        "arguments": arguments,
     })
 }
 
