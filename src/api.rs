@@ -165,13 +165,17 @@ impl JulesClient {
         Ok(list_response.sessions)
     }
 
-    pub async fn create_session(&self, source: &str) -> Result<Session, JulesError> {
+    pub async fn create_session(&self, source: &str, auto_pr: bool) -> Result<Session, JulesError> {
         let url = format!("{}/sessions", API_BASE_URL);
+        let mut json_body = serde_json::json!({ "source": source });
+        if auto_pr {
+            json_body["automationMode"] = serde_json::json!("AUTO_CREATE_PR");
+        }
         let response = self
             .client
             .post(&url)
             .header("x-goog-api-key", &self.api_key)
-            .json(&serde_json::json!({ "source": source }))
+            .json(&json_body)
             .send()
             .await?;
         self.handle_response(response).await
