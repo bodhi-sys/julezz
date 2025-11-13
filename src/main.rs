@@ -95,10 +95,21 @@ enum SessionsCommands {
 
 #[derive(clap::Subcommand, Debug)]
 enum ActivitiesCommands {
-    /// List activities for a session by index
+    /// Fetch activities for a session by index
+    Fetch {
+        /// The index of the session
+        index: String,
+    },
+    /// List cached activities for a session by index
     List {
         /// The index of the session
         index: String,
+        /// Number of last messages to show
+        #[arg(short, long, default_value_t = 5)]
+        n: usize,
+        /// Re-fetch messages before listing
+        #[arg(short, long)]
+        r: bool,
     },
     /// Get a specific activity from a session by index
     Get {
@@ -265,57 +276,35 @@ async fn main() {
             }
         },
         Commands::Activities { command } => match command {
-            ActivitiesCommands::List { index } => {
+            ActivitiesCommands::Fetch { index } => {
                 match get_session_id_from_index(&index) {
                     Ok(session_id) => {
-                        match client.list_activities(&session_id).await {
+                        match client.fetch_activities(&session_id).await {
                             Ok(activities) => {
-                                println!(
-                                    "{}\n",
-                                    format!("Activities for session {}", session_id)
-                                        .bold()
-                                        .underline()
-                                );
-                                let mut activities = activities;
-                                activities.sort_by(|a, b| a.create_time.cmp(&b.create_time));
-                                for activity in activities {
-                                    let originator = match activity.originator.as_str() {
-                                        "agent" => activity.originator.cyan(),
-                                        "user" => activity.originator.green(),
-                                        _ => activity.originator.dimmed(),
-                                    };
-                                    println!(
-                                        "[{}] {}",
-                                        activity.create_time.dimmed(),
-                                        originator
-                                    );
-                                    if let Some(agent_messaged) = activity.agent_messaged {
-                                        if !agent_messaged.agent_message.is_empty() {
-                                            println!("  {}", agent_messaged.agent_message);
-                                        } else if let Some(progress) = activity.progress_updated {
-                                            if let Some(description) = &progress.description {
-                                                println!("  {}\n    {}", progress.title.clone().unwrap_or_default().dimmed(), description.dimmed());
-                                            } else {
-                                                println!("  {}", progress.title.clone().unwrap_or_default().dimmed());
-                                            }
-                                        } else if let Some(title) = activity.title {
-                                            println!("  {}", title.dimmed());
-                                        }
-                                    } else if let Some(user_messaged) = activity.user_messaged {
-                                        println!("  {}", user_messaged.user_message);
-                                    } else if activity.plan_approved.is_some() {
-                                        println!("  {}", "Plan Approved".yellow());
-                                    } else if let Some(progress) = activity.progress_updated {
-                                        if let Some(description) = &progress.description {
-                                            println!("  {}\n    {}", progress.title.clone().unwrap_or_default().dimmed(), description.dimmed());
-                                        } else {
-                                            println!("  {}", progress.title.clone().unwrap_or_default().dimmed());
-                                        }
-                                    } else if let Some(title) = activity.title {
-                                        println!("  {}", title.dimmed());
-                                    }
-                                    println!();
-                                }
+                                print_activities(&activities, activities.len(), &session_id);
+                            }
+                            Err(e) => {
+                                handle_error(e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{} {}", "Error:".red(), e);
+                    }
+                }
+            }
+            ActivitiesCommands::List { index, n, r } => {
+                match get_session_id_from_index(&index) {
+                    Ok(session_id) => {
+                        let activities_result = if r {
+                            client.fetch_activities(&session_id).await
+                        } else {
+                            client.list_cached_activities(&session_id)
+                        };
+
+                        match activities_result {
+                            Ok(activities) => {
+                                print_activities(&activities, n, &session_id);
                             }
                             Err(e) => {
                                 handle_error(e);
@@ -364,5 +353,56 @@ mod tests {
         ]);
         assert_eq!(args.api_key, Some("test-key".to_string()));
         assert!(matches!(args.command, Commands::Sources { .. }));
+    }
+}
+
+fn print_activities(activities: &[julezz::api::Activity], n: usize, session_id: &str) {
+    println!(
+        "{}\n",
+        format!("Activities for session {}", session_id)
+            .bold()
+            .underline()
+    );
+    let mut activities = activities.to_vec();
+    activities.sort_by(|a, b| a.create_time.cmp(&b.create_time));
+    let activities_to_show = activities.iter().rev().take(n).rev();
+
+    for activity in activities_to_show {
+        let originator = match activity.originator.as_str() {
+            "agent" => activity.originator.cyan(),
+            "user" => activity.originator.green(),
+            _ => activity.originator.dimmed(),
+        };
+        println!(
+            "[{}] {}",
+            activity.create_time.dimmed(),
+            originator
+        );
+        if let Some(agent_messaged) = &activity.agent_messaged {
+            if !agent_messaged.agent_message.is_empty() {
+                println!("  {}", agent_messaged.agent_message);
+            } else if let Some(progress) = &activity.progress_updated {
+                if let Some(description) = &progress.description {
+                    println!("  {}\n    {}", progress.title.clone().unwrap_or_default().dimmed(), description.dimmed());
+                } else {
+                    println!("  {}", progress.title.clone().unwrap_or_default().dimmed());
+                }
+            } else if let Some(title) = &activity.title {
+                println!("  {}", title.dimmed());
+            }
+        } else if let Some(user_messaged) = &activity.user_messaged {
+            println!("  {}", user_messaged.user_message);
+        } else if activity.plan_approved.is_some() {
+            println!("  {}", "Plan Approved".yellow());
+        } else if let Some(progress) = &activity.progress_updated {
+            if let Some(description) = &progress.description {
+                println!("  {}\n    {}", progress.title.clone().unwrap_or_default().dimmed(), description.dimmed());
+            } else {
+                println!("  {}", progress.title.clone().unwrap_or_default().dimmed());
+            }
+        } else if let Some(title) = &activity.title {
+            println!("  {}", title.dimmed());
+        }
+        println!();
     }
 }

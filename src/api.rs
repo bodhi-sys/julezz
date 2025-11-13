@@ -227,7 +227,32 @@ impl JulesClient {
         Ok(())
     }
 
-    pub async fn list_activities(
+    pub fn list_cached_activities(&self, session_id: &str) -> Result<Vec<Activity>, JulesError> {
+        let cache_dir = dirs::cache_dir()
+            .ok_or_else(|| JulesError::ApiError("Could not determine cache directory".to_string()))?
+            .join("julezz")
+            .join(session_id);
+
+        let messages_path = cache_dir.join("messages.json");
+        let last_page_path = cache_dir.join("last_page.json");
+
+        let mut activities: Vec<Activity> = if messages_path.exists() {
+            let data = fs::read_to_string(&messages_path).map_err(|e| JulesError::ApiError(format!("Could not read messages file: {}", e)))?;
+            serde_json::from_str(&data).map_err(|e| JulesError::ApiError(format!("Could not parse messages file: {}", e)))?
+        } else {
+            Vec::new()
+        };
+
+        if last_page_path.exists() {
+            let data = fs::read_to_string(&last_page_path).map_err(|e| JulesError::ApiError(format!("Could not read last page file: {}", e)))?;
+            let last_page_activities: Vec<Activity> = serde_json::from_str(&data).map_err(|e| JulesError::ApiError(format!("Could not parse last page file: {}", e)))?;
+            activities.extend(last_page_activities);
+        }
+
+        Ok(activities)
+    }
+
+    pub async fn fetch_activities(
         &self,
         session_id: &str,
     ) -> Result<Vec<Activity>, JulesError> {
