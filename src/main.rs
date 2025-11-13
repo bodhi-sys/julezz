@@ -73,9 +73,9 @@ enum SessionsCommands {
         /// The source to use for the session
         #[arg(short, long)]
         source: String,
-        /// Automatically create a pull request
+        /// Disable automatically creating a pull request
         #[arg(long)]
-        auto_pr: bool,
+        no_auto_pr: bool,
     },
     /// Get a session by index
     Get {
@@ -224,8 +224,8 @@ async fn main() {
                     }
                 }
             }
-            SessionsCommands::Create { source, auto_pr } => {
-                match client.create_session(&source, auto_pr).await {
+            SessionsCommands::Create { source, no_auto_pr } => {
+                match client.create_session(&source, !no_auto_pr).await {
                     Ok(session) => {
                         println!("Session created:");
                         println!("- {}: {} ({})", session.id, session.name, session.state);
