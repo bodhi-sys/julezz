@@ -1,7 +1,8 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use colored::Colorize;
 use julezz::api::{handle_error, JulesClient};
 use std::fs;
+use std::io;
 
 fn get_session_id_from_index(index_str: &str) -> Result<String, String> {
     let index: usize = index_str.parse().map_err(|_| "Invalid index".to_string())?;
@@ -50,6 +51,17 @@ enum Commands {
     Activities {
         #[command(subcommand)]
         command: ActivitiesCommands,
+    },
+    /// Generate shell completions
+    Completions {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
+    #[command(hide = true)]
+    __CarapaceSpec {
+        /// The spec to generate
+        spec: String,
     },
 }
 
@@ -338,7 +350,42 @@ async fn main() {
                 }
             }
         },
+        Commands::Completions { shell } => {
+            let mut cmd = Args::command();
+            let name = cmd.get_name().to_string();
+            clap_complete::generate(shell, &mut cmd, name, &mut io::stdout());
+        }
+        Commands::__CarapaceSpec { .. } => {
+            let cmd = Args::command();
+            let json_spec = command_to_json(&cmd);
+            println!("{}", serde_json::to_string(&json_spec).unwrap());
+        }
     }
+}
+
+fn command_to_json(cmd: &clap::Command) -> serde_json::Value {
+    let mut subcommands = Vec::new();
+    for sub in cmd.get_subcommands() {
+        subcommands.push(command_to_json(sub));
+    }
+
+    let mut flags = Vec::new();
+    for arg in cmd.get_arguments() {
+        if arg.get_long().is_some() {
+            flags.push(serde_json::json!({
+                "long": arg.get_long(),
+                "short": arg.get_short(),
+                "help": arg.get_help().map(|s| s.to_string()),
+            }));
+        }
+    }
+
+    serde_json::json!({
+        "name": cmd.get_name(),
+        "about": cmd.get_about().map(|s| s.to_string()),
+        "subcommands": subcommands,
+        "flags": flags,
+    })
 }
 
 #[cfg(test)]
