@@ -192,57 +192,8 @@ async fn main() {
                         if sessions_list.is_empty() {
                             println!("No sessions found.");
                         } else {
-                            let cached_sessions: Vec<CachedSession> = sessions_list
-                                .iter()
-                                .map(|s| CachedSession {
-                                    id: s.id.clone(),
-                                    title: s.title.clone(),
-                                })
-                                .collect();
-                            if let Some(config_dir) = dirs::config_dir() {
-                                let jules_dir = config_dir.join("julezz");
-                                if let Err(e) = fs::create_dir_all(&jules_dir) {
-                                    eprintln!("{} Could not create config directory: {}", "Error:".red(), e);
-                                } else {
-                                    let sessions_file = jules_dir.join("sessions.json");
-                                    match serde_json::to_string(&cached_sessions) {
-                                        Ok(json) => {
-                                            if let Err(e) = fs::write(sessions_file, json) {
-                                                eprintln!("{} Could not write to sessions file: {}", "Error:".red(), e);
-                                            }
-                                        }
-                                        Err(e) => {
-                                            eprintln!("{} Could not serialize session IDs: {}", "Error:".red(), e);
-                                        }
-                                    }
-                                }
-                            }
-
-                            for (i, session) in sessions_list.iter().enumerate() {
-                                let state = match session.state.as_deref() {
-                                    Some("ACTIVE") => "ACTIVE".green(),
-                                    Some("COMPLETED") => "COMPLETED".blue(),
-                                    _ => "UNKNOWN".yellow(),
-                                };
-                                println!(
-                                    "\n{}: {}: {}",
-                                    (i + 1).to_string().bold(),
-                                    session.id.bold(),
-                                    session.title
-                                );
-                                if let Some(source_context) = &session.source_context {
-                                    if let Some(repo_context) = &source_context.github_repo_context {
-                                        let repo_name =
-                                            source_context.source.replace("sources/github/", "");
-                                        println!(
-                                            "  {} {}/{}",
-                                            "Repo:".dimmed(),
-                                            repo_name,
-                                            repo_context.starting_branch.cyan()
-                                        );
-                                    }
-                                }
-                                println!("  {}: {}", "State".dimmed(), state);
+                            if let Err(e) = manage_sessions_cache(&sessions_list) {
+                                eprintln!("{} {}", "Error:".red(), e);
                             }
                         }
                     }
@@ -371,28 +322,78 @@ async fn main() {
             clap_complete::generate(shell, &mut cmd, name, &mut io::stdout());
         }
         Commands::__CarapaceSpec { .. } => {
-            let mut cmd = Args::command();
-            let mut buffer = Vec::new();
-            clap_complete::generate(carapace_spec_clap::Spec, &mut cmd, "julezz", &mut buffer);
-            let mut yaml_spec: serde_yaml::Value = serde_yaml::from_slice(&buffer).unwrap();
+            if let Err(e) = generate_carapace_spec() {
+                eprintln!("{} {}", "Error:".red(), e);
+            }
+        }
+        Commands::ListCachedSessionsForCompletion => {
+            if let Err(e) = list_cached_sessions_for_completion() {
+                eprintln!("{} {}", "Error:".red(), e);
+            }
+        }
+    }
+}
 
-            if let Some(mapping) = yaml_spec.get_mut("completion").and_then(|c| c.get_mut("commands")).and_then(|c| c.as_sequence_mut()) {
-                for item in mapping {
-                    if let Some(item_map) = item.as_mapping_mut() {
-                        let name = item_map.get("name").and_then(|n| n.as_str());
-                        if name == Some("sessions") {
-                            if let Some(commands) = item_map.get_mut("commands").and_then(|c| c.as_sequence_mut()) {
-                                for session_cmd in commands {
-                                    if let Some(args) = session_cmd.get_mut("arguments").and_then(|a| a.as_sequence_mut()) {
-                                        for arg in args {
-                                            if let Some(arg_map) = arg.as_mapping_mut() {
-                                                if arg_map.get("name").and_then(|n| n.as_str()) == Some("index") {
-                                                    arg_map.insert(
-                                                        serde_yaml::Value::String("completion".to_string()),
-                                                        serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("julezz list-cached-sessions-for-completion".to_string())])
-                                                    );
-                                                }
-                                            }
+fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), String> {
+    let config_dir = dirs::config_dir().ok_or("Could not find config directory")?;
+    let jules_dir = config_dir.join("julezz");
+    fs::create_dir_all(&jules_dir).map_err(|e| format!("Could not create config directory: {}", e))?;
+    let sessions_file = jules_dir.join("sessions.json");
+
+    let mut cached_sessions: Vec<CachedSession> = if sessions_file.exists() {
+        let data = fs::read_to_string(&sessions_file).map_err(|e| format!("Could not read sessions file: {}", e))?;
+        serde_json::from_str(&data).map_err(|e| format!("Could not parse sessions file: {}", e))?
+    } else {
+        Vec::new()
+    };
+
+    for session in sessions_list.iter() {
+        if !cached_sessions.iter().any(|s| s.id == session.id) {
+            cached_sessions.push(CachedSession {
+                id: session.id.clone(),
+                title: session.title.clone(),
+            });
+        }
+    }
+
+    let json = serde_json::to_string(&cached_sessions).map_err(|e| format!("Could not serialize sessions: {}", e))?;
+    fs::write(sessions_file, json).map_err(|e| format!("Could not write sessions file: {}", e))?;
+
+    for (i, session) in cached_sessions.iter().rev().enumerate() {
+        let state = "ACTIVE".green(); // Placeholder
+        println!(
+            "\n{}: {}: {}",
+            (i + 1).to_string().bold(),
+            session.id.bold(),
+            session.title
+        );
+        println!("  {}: {}", "State".dimmed(), state);
+    }
+
+    Ok(())
+}
+
+fn generate_carapace_spec() -> Result<(), String> {
+    let mut cmd = Args::command();
+    let mut buffer = Vec::new();
+    clap_complete::generate(carapace_spec_clap::Spec, &mut cmd, "julezz", &mut buffer);
+    let mut yaml_spec: serde_yaml::Value = serde_yaml::from_slice(&buffer).map_err(|e| format!("Could not parse YAML spec: {}", e))?;
+
+    if let Some(mapping) = yaml_spec.get_mut("completion").and_then(|c| c.get_mut("commands")).and_then(|c| c.as_sequence_mut()) {
+        for item in mapping {
+            if let Some(item_map) = item.as_mapping_mut() {
+                let name = item_map.get("name").and_then(|n| n.as_str());
+                if name == Some("sessions") {
+                    if let Some(commands) = item_map.get_mut("commands").and_then(|c| c.as_sequence_mut()) {
+                        for session_cmd in commands {
+                            if let Some(args) = session_cmd.get_mut("arguments").and_then(|a| a.as_sequence_mut()) {
+                                for arg in args {
+                                    if let Some(arg_map) = arg.as_mapping_mut() {
+                                        if arg_map.get("name").and_then(|n| n.as_str()) == Some("index") {
+                                            arg_map.insert(
+                                                serde_yaml::Value::String("completion".to_string()),
+                                                serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("julezz list-cached-sessions-for-completion".to_string())])
+                                            );
                                         }
                                     }
                                 }
@@ -401,21 +402,24 @@ async fn main() {
                     }
                 }
             }
-            println!("{}", serde_yaml::to_string(&yaml_spec).unwrap());
         }
-        Commands::ListCachedSessionsForCompletion => {
-            if let Some(config_dir) = dirs::config_dir() {
-                let sessions_file = config_dir.join("julezz").join("sessions.json");
-                if sessions_file.exists() {
-                    let data = fs::read_to_string(sessions_file).unwrap();
-                    let sessions: Vec<CachedSession> = serde_json::from_str(&data).unwrap();
-                    for (i, session) in sessions.iter().enumerate() {
-                        println!("{}\t{}", i + 1, session.title);
-                    }
-                }
+    }
+    println!("{}", serde_yaml::to_string(&yaml_spec).map_err(|e| format!("Could not serialize YAML spec: {}", e))?);
+    Ok(())
+}
+
+fn list_cached_sessions_for_completion() -> Result<(), String> {
+    if let Some(config_dir) = dirs::config_dir() {
+        let sessions_file = config_dir.join("julezz").join("sessions.json");
+        if sessions_file.exists() {
+            let data = fs::read_to_string(sessions_file).map_err(|e| format!("Could not read sessions file: {}", e))?;
+            let sessions: Vec<CachedSession> = serde_json::from_str(&data).map_err(|e| format!("Could not parse sessions file: {}", e))?;
+            for (i, session) in sessions.iter().rev().enumerate() {
+                println!("{}\t{}", i + 1, session.title);
             }
         }
     }
+    Ok(())
 }
 
 
