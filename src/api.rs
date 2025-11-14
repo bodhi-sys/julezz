@@ -318,7 +318,7 @@ impl JulesClient {
             }
         }
 
-        stable_activities.extend(new_activities_to_make_stable.clone());
+        stable_activities.extend(new_activities_to_make_stable);
         fs::write(&messages_path, serde_json::to_string(&stable_activities).map_err(|e| JulesError::ApiError(format!("Could not serialize messages: {}", e)))?).map_err(|e| JulesError::ApiError(format!("Could not write messages file: {}", e)))?;
 
         fs::write(&last_page_path, serde_json::to_string(&last_page_activities).map_err(|e| JulesError::ApiError(format!("Could not serialize last page activities: {}", e)))?).map_err(|e| JulesError::ApiError(format!("Could not write last page file: {}", e)))?;

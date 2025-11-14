@@ -4,6 +4,7 @@ use julezz::api::{handle_error, JulesClient};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
+use clap_complete::Generator;
 
 #[derive(Serialize, Deserialize)]
 struct CachedSession {
@@ -65,7 +66,7 @@ enum Commands {
         #[arg(value_enum)]
         shell: clap_complete::Shell,
     },
-    #[command(hide = true)]
+    #[command(hide = true, name = "__carapace_spec")]
     __CarapaceSpec {
         /// The spec to generate
         spec: String,
@@ -370,17 +371,28 @@ async fn main() {
             clap_complete::generate(shell, &mut cmd, name, &mut io::stdout());
         }
         Commands::__CarapaceSpec { .. } => {
-            let cmd = Args::command();
-            let mut spec = command_to_json(&cmd);
-            if let Some(commands) = spec["subcommands"].as_array_mut() {
-                for command in commands {
-                    if command["name"] == "sessions" {
-                        if let Some(subcommands) = command["subcommands"].as_array_mut() {
-                            for subcommand in subcommands {
-                                if let Some(args) = subcommand["arguments"].as_array_mut() {
-                                    for arg in args {
-                                        if arg["name"] == "index" {
-                                            arg["completion"] = serde_json::json!(["julezz", "list-cached-sessions-for-completion"]);
+            let mut cmd = Args::command();
+            let mut buffer = Vec::new();
+            carapace_spec_clap::Spec.generate(&mut cmd, &mut buffer);
+            let mut yaml_spec: serde_yaml::Value = serde_yaml::from_slice(&buffer).unwrap();
+
+            if let Some(mapping) = yaml_spec.get_mut("completion").and_then(|c| c.get_mut("commands")).and_then(|c| c.as_sequence_mut()) {
+                for item in mapping {
+                    if let Some(item_map) = item.as_mapping_mut() {
+                        let name = item_map.get("name").and_then(|n| n.as_str());
+                        if name == Some("sessions") {
+                            if let Some(commands) = item_map.get_mut("commands").and_then(|c| c.as_sequence_mut()) {
+                                for session_cmd in commands {
+                                    if let Some(args) = session_cmd.get_mut("arguments").and_then(|a| a.as_sequence_mut()) {
+                                        for arg in args {
+                                            if let Some(arg_map) = arg.as_mapping_mut() {
+                                                if arg_map.get("name").and_then(|n| n.as_str()) == Some("index") {
+                                                    arg_map.insert(
+                                                        serde_yaml::Value::String("completion".to_string()),
+                                                        serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("julezz list-cached-sessions-for-completion".to_string())])
+                                                    );
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -389,7 +401,7 @@ async fn main() {
                     }
                 }
             }
-            println!("{}", serde_json::to_string(&spec).unwrap());
+            println!("{}", serde_yaml::to_string(&yaml_spec).unwrap());
         }
         Commands::ListCachedSessionsForCompletion => {
             if let Some(config_dir) = dirs::config_dir() {
@@ -407,39 +419,8 @@ async fn main() {
 }
 
 
-fn command_to_json(cmd: &clap::Command) -> serde_json::Value {
-    let mut subcommands = Vec::new();
-    for sub in cmd.get_subcommands() {
-        subcommands.push(command_to_json(sub));
-    }
 
-    let mut flags = Vec::new();
-    for arg in cmd.get_arguments() {
-        if arg.get_long().is_some() {
-            flags.push(serde_json::json!({
-                "long": arg.get_long(),
-                "short": arg.get_short(),
-                "help": arg.get_help().map(|s| s.to_string()),
-            }));
-        }
-    }
 
-    let mut arguments = Vec::new();
-    for arg in cmd.get_positionals() {
-        arguments.push(serde_json::json!({
-            "name": arg.get_id().to_string(),
-            "help": arg.get_help().map(|s| s.to_string()),
-        }));
-    }
-
-    serde_json::json!({
-        "name": cmd.get_name(),
-        "about": cmd.get_about().map(|s| s.to_string()),
-        "subcommands": subcommands,
-        "flags": flags,
-        "arguments": arguments,
-    })
-}
 
 #[cfg(test)]
 mod tests {
