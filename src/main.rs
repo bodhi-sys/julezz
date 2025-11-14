@@ -347,8 +347,14 @@ fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), S
         Vec::new()
     };
 
+    // Filter out cached sessions that are no longer in the API response
+    let live_session_ids: std::collections::HashSet<_> = sessions_list.iter().map(|s| s.id.as_str()).collect();
+    cached_sessions.retain(|cs| live_session_ids.contains(cs.id.as_str()));
+
+    // Add new sessions from the API response to the cache
+    let cached_session_ids: std::collections::HashSet<_> = cached_sessions.iter().map(|cs| cs.id.clone()).collect();
     for session in sessions_list.iter() {
-        if !cached_sessions.iter().any(|s| s.id == session.id) {
+        if !cached_session_ids.contains(&session.id) {
             cached_sessions.push(CachedSession {
                 id: session.id.clone(),
                 title: session.title.clone(),
