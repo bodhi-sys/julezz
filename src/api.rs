@@ -32,7 +32,7 @@ pub struct GithubRepoContext {
 pub struct Session {
     pub name: String,
     pub id: String,
-    pub state: String,
+    pub state: Option<String>,
     pub title: String,
     #[serde(rename = "sourceContext")]
     pub source_context: Option<SourceContext>,
@@ -165,13 +165,21 @@ impl JulesClient {
         Ok(list_response.sessions)
     }
 
-    pub async fn create_session(&self, source: &str, auto_pr: bool) -> Result<Session, JulesError> {
+    pub async fn create_session(&self, source: &str, title: &str, auto_pr: bool) -> Result<Session, JulesError> {
         let url = format!("{}/sessions", API_BASE_URL);
-        let mut session_data = serde_json::json!({ "source": source });
+        let mut json_body = serde_json::json!({
+            "prompt": title,
+            "sourceContext": {
+                "source": source,
+                "githubRepoContext": {
+                    "startingBranch": "main"
+                }
+            },
+            "title": title
+        });
         if auto_pr {
-            session_data["automationMode"] = serde_json::json!("AUTO_CREATE_PR");
+            json_body["automationMode"] = serde_json::json!("AUTO_CREATE_PR");
         }
-        let json_body = serde_json::json!({ "session": session_data });
         let response = self
             .client
             .post(&url)

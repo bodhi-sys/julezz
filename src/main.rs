@@ -95,6 +95,8 @@ enum SessionsCommands {
         /// The source to use for the session
         #[arg(short, long)]
         source: String,
+        /// The title of the session
+        title: String,
         /// Disable automatically creating a pull request
         #[arg(long)]
         no_auto_pr: bool,
@@ -218,10 +220,10 @@ async fn main() {
                             }
 
                             for (i, session) in sessions_list.iter().enumerate() {
-                                let state = match session.state.as_str() {
-                                    "ACTIVE" => session.state.green(),
-                                    "COMPLETED" => session.state.blue(),
-                                    _ => session.state.yellow(),
+                                let state = match session.state.as_deref() {
+                                    Some("ACTIVE") => "ACTIVE".green(),
+                                    Some("COMPLETED") => "COMPLETED".blue(),
+                                    _ => "UNKNOWN".yellow(),
                                 };
                                 println!(
                                     "\n{}: {}: {}",
@@ -250,11 +252,11 @@ async fn main() {
                     }
                 }
             }
-            SessionsCommands::Create { source, no_auto_pr } => {
-                match client.create_session(&source, !no_auto_pr).await {
+            SessionsCommands::Create { source, title, no_auto_pr } => {
+                match client.create_session(&source, &title, !no_auto_pr).await {
                     Ok(session) => {
                         println!("Session created:");
-                        println!("- {}: {} ({})", session.id, session.name, session.state);
+                        println!("- {}: {} ({})", session.id, session.name, session.state.unwrap_or_default());
                     }
                     Err(e) => {
                         handle_error(e);
@@ -267,7 +269,7 @@ async fn main() {
                         match client.get_session(&session_id).await {
                             Ok(session) => {
                                 println!("Session:");
-                                println!("- {}: {} ({})", session.id, session.name, session.state);
+                                println!("- {}: {} ({})", session.id, session.name, session.state.unwrap_or_default());
                             }
                             Err(e) => {
                                 handle_error(e);
