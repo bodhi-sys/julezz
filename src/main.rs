@@ -4,7 +4,6 @@ use julezz::api::{handle_error, JulesClient};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
-use clap_complete::Generator;
 
 #[derive(Serialize, Deserialize)]
 struct CachedSession {
@@ -374,7 +373,7 @@ async fn main() {
         Commands::__CarapaceSpec { .. } => {
             let mut cmd = Args::command();
             let mut buffer = Vec::new();
-            carapace_spec_clap::Spec.generate(&mut cmd, &mut buffer);
+            clap_complete::generate(carapace_spec_clap::Spec, &mut cmd, "julezz", &mut buffer);
             let mut yaml_spec: serde_yaml::Value = serde_yaml::from_slice(&buffer).unwrap();
 
             if let Some(mapping) = yaml_spec.get_mut("completion").and_then(|c| c.get_mut("commands")).and_then(|c| c.as_sequence_mut()) {
