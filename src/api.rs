@@ -167,10 +167,11 @@ impl JulesClient {
 
     pub async fn create_session(&self, source: &str, auto_pr: bool) -> Result<Session, JulesError> {
         let url = format!("{}/sessions", API_BASE_URL);
-        let mut json_body = serde_json::json!({ "source": source });
+        let mut session_data = serde_json::json!({ "source": source });
         if auto_pr {
-            json_body["automationMode"] = serde_json::json!("AUTO_CREATE_PR");
+            session_data["automationMode"] = serde_json::json!("AUTO_CREATE_PR");
         }
+        let json_body = serde_json::json!({ "session": session_data });
         let response = self
             .client
             .post(&url)

@@ -162,9 +162,8 @@ async fn main() {
             SourcesCommands::List => {
                 match client.list_sources().await {
                     Ok(sources) => {
-                        println!("Available sources:");
                         for source in sources {
-                            println!("- {}: {}", source.id, source.name);
+                            println!("{}", source.id);
                         }
                     }
                     Err(e) => {
