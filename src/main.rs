@@ -359,8 +359,19 @@ fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), S
     let json = serde_json::to_string(&cached_sessions).map_err(|e| format!("Could not serialize sessions: {}", e))?;
     fs::write(sessions_file, json).map_err(|e| format!("Could not write sessions file: {}", e))?;
 
-    for (i, session) in cached_sessions.iter().rev().enumerate() {
-        let state = "ACTIVE".green(); // Placeholder
+    // Create a map of session IDs to their states for quick lookup
+    let session_states: std::collections::HashMap<_, _> = sessions_list
+        .iter()
+        .map(|s| (s.id.as_str(), s.state.as_deref().unwrap_or("UNKNOWN")))
+        .collect();
+
+    for (i, session) in cached_sessions.iter().enumerate() {
+        let state_str = session_states.get(session.id.as_str()).unwrap_or(&"UNKNOWN");
+        let state = match *state_str {
+            "ACTIVE" => state_str.green(),
+            "COMPLETED" => state_str.blue(),
+            _ => state_str.red(),
+        };
         println!(
             "\n{}: {}: {}",
             (i + 1).to_string().bold(),
@@ -414,7 +425,7 @@ fn list_cached_sessions_for_completion() -> Result<(), String> {
         if sessions_file.exists() {
             let data = fs::read_to_string(sessions_file).map_err(|e| format!("Could not read sessions file: {}", e))?;
             let sessions: Vec<CachedSession> = serde_json::from_str(&data).map_err(|e| format!("Could not parse sessions file: {}", e))?;
-            for (i, session) in sessions.iter().rev().enumerate() {
+            for (i, session) in sessions.iter().enumerate() {
                 println!("{}\t{}", i + 1, session.title);
             }
         }
