@@ -416,11 +416,11 @@ fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), S
         };
 
         println!(
-            "\n{}: {}: {}{}",
+            "\n{}:{}{}: {}",
             (i + 1).to_string().bold(),
+            alias_str,
             session.id.bold(),
-            session.title,
-            alias_str
+            session.title
         );
         println!("  {}: {}", "State".dimmed(), state);
     }
@@ -548,7 +548,7 @@ mod tests {
     #[test]
     fn test_cli_args() {
         let args = Args::parse_from(&[
-            "jules-cli",
+            "julezz",
             "--api-key",
             "test-key",
             "sources",
