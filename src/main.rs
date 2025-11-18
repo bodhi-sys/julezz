@@ -395,6 +395,12 @@ fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), S
         .map(|s| (s.id.as_str(), s.state.as_deref().unwrap_or("UNKNOWN")))
         .collect();
 
+    let aliases = read_aliases()?;
+    let mut session_aliases: std::collections::HashMap<usize, Vec<String>> = std::collections::HashMap::new();
+    for (alias, number) in aliases {
+        session_aliases.entry(number).or_default().push(alias);
+    }
+
     for (i, session) in cached_sessions.iter().enumerate() {
         let state_str = session_states.get(session.id.as_str()).unwrap_or(&"UNKNOWN");
         let state = match *state_str {
@@ -402,11 +408,19 @@ fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), S
             "COMPLETED" => state_str.blue(),
             _ => state_str.red(),
         };
+
+        let alias_str = if let Some(aliases) = session_aliases.get(&(i + 1)) {
+            format!(" ({})", aliases.join(", ")).yellow()
+        } else {
+            "".yellow()
+        };
+
         println!(
-            "\n{}: {}: {}",
+            "\n{}: {}: {}{}",
             (i + 1).to_string().bold(),
             session.id.bold(),
-            session.title
+            session.title,
+            alias_str
         );
         println!("  {}: {}", "State".dimmed(), state);
     }
