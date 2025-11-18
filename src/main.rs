@@ -11,23 +11,32 @@ struct CachedSession {
     title: String,
 }
 
-fn get_session_id_from_index(index_str: &str) -> Result<String, String> {
-    let index: usize = index_str.parse().map_err(|_| "Invalid index".to_string())?;
-    if index == 0 {
-        return Err("Index must be greater than 0".to_string());
-    }
+fn resolve_session_identifier(identifier: &str) -> Result<String, String> {
+    if identifier.starts_with('@') {
+        let aliases = read_aliases()?;
+        if let Some(number) = aliases.get(identifier) {
+            resolve_session_identifier(&number.to_string())
+        } else {
+            Err(format!("Alias '{}' not found.", identifier))
+        }
+    } else {
+        let index: usize = identifier.parse().map_err(|_| "Invalid index or alias".to_string())?;
+        if index == 0 {
+            return Err("Index must be greater than 0".to_string());
+        }
 
-    if let Some(config_dir) = dirs::config_dir() {
-        let sessions_file = config_dir.join("julezz").join("sessions.json");
-        if sessions_file.exists() {
-            let data = fs::read_to_string(sessions_file).map_err(|_| "Could not read sessions file".to_string())?;
-            let sessions: Vec<CachedSession> = serde_json::from_str(&data).map_err(|_| "Could not parse sessions file".to_string())?;
-            if let Some(session) = sessions.get(index - 1) {
-                return Ok(session.id.clone());
+        if let Some(config_dir) = dirs::config_dir() {
+            let sessions_file = config_dir.join("julezz").join("sessions.json");
+            if sessions_file.exists() {
+                let data = fs::read_to_string(sessions_file).map_err(|_| "Could not read sessions file".to_string())?;
+                let sessions: Vec<CachedSession> = serde_json::from_str(&data).map_err(|_| "Could not parse sessions file".to_string())?;
+                if let Some(session) = sessions.get(index - 1) {
+                    return Ok(session.id.clone());
+                }
             }
         }
+        Err("Session index not found. Run `sessions list` to refresh the cache.".to_string())
     }
-    Err("Session index not found. Run `sessions list` to refresh the cache.".to_string())
 }
 
 /// A cool CLI for Google Jules
@@ -87,6 +96,16 @@ enum SourcesCommands {
 
 #[derive(clap::Subcommand, Debug)]
 enum SessionsCommands {
+    /// Manage session aliases
+    Alias {
+        /// The alias to create or delete
+        alias: Option<String>,
+        /// The session number to associate with the alias
+        session_number: Option<usize>,
+        /// Delete the specified alias
+        #[arg(short, long)]
+        delete: bool,
+    },
     /// List sessions
     List,
     /// Create a new session
@@ -185,6 +204,11 @@ async fn main() {
             }
         },
         Commands::Sessions { command } => match command {
+            SessionsCommands::Alias { alias, session_number, delete } => {
+                if let Err(e) = manage_aliases(alias, session_number, delete) {
+                    eprintln!("{} {}", "Error:".red(), e);
+                }
+            }
             SessionsCommands::List => {
                 match client.list_sessions().await {
                     Ok(sessions_list) => {
@@ -214,7 +238,7 @@ async fn main() {
                 }
             }
             SessionsCommands::Get { index } => {
-                match get_session_id_from_index(&index) {
+                match resolve_session_identifier(&index) {
                     Ok(session_id) => {
                         match client.get_session(&session_id).await {
                             Ok(session) => {
@@ -232,7 +256,7 @@ async fn main() {
                 }
             }
             SessionsCommands::ApprovePlan { index } => {
-                match get_session_id_from_index(&index) {
+                match resolve_session_identifier(&index) {
                     Ok(session_id) => {
                         if let Err(e) = client.approve_plan(&session_id).await {
                             handle_error(e);
@@ -244,7 +268,7 @@ async fn main() {
                 }
             }
             SessionsCommands::SendMessage { index, prompt } => {
-                match get_session_id_from_index(&index) {
+                match resolve_session_identifier(&index) {
                     Ok(session_id) => {
                         if let Err(e) = client.send_message(&session_id, &prompt).await {
                             handle_error(e);
@@ -258,7 +282,7 @@ async fn main() {
         },
         Commands::Activities { command } => match command {
             ActivitiesCommands::Fetch { index } => {
-                match get_session_id_from_index(&index) {
+                match resolve_session_identifier(&index) {
                     Ok(session_id) => {
                         match client.fetch_activities(&session_id).await {
                             Ok(activities) => {
@@ -275,7 +299,7 @@ async fn main() {
                 }
             }
             ActivitiesCommands::List { index, n, r } => {
-                match get_session_id_from_index(&index) {
+                match resolve_session_identifier(&index) {
                     Ok(session_id) => {
                         let activities_result = if r {
                             client.fetch_activities(&session_id).await
@@ -298,7 +322,7 @@ async fn main() {
                 }
             }
             ActivitiesCommands::Get { index, id } => {
-                match get_session_id_from_index(&index) {
+                match resolve_session_identifier(&index) {
                     Ok(session_id) => {
                         match client.get_activity(&session_id, &id).await {
                             Ok(activity) => {
@@ -436,6 +460,66 @@ fn list_cached_sessions_for_completion() -> Result<(), String> {
             }
         }
     }
+    Ok(())
+}
+
+fn read_aliases() -> Result<std::collections::HashMap<String, usize>, String> {
+    let config_dir = dirs::config_dir().ok_or("Could not find config directory")?;
+    let aliases_file = config_dir.join("julezz").join("aliases.json");
+    if aliases_file.exists() {
+        let data = fs::read_to_string(aliases_file).map_err(|e| format!("Could not read aliases file: {}", e))?;
+        serde_json::from_str(&data).map_err(|e| format!("Could not parse aliases file: {}", e))
+    } else {
+        Ok(std::collections::HashMap::new())
+    }
+}
+
+fn write_aliases(aliases: &std::collections::HashMap<String, usize>) -> Result<(), String> {
+    let config_dir = dirs::config_dir().ok_or("Could not find config directory")?;
+    let jules_dir = config_dir.join("julezz");
+    fs::create_dir_all(&jules_dir).map_err(|e| format!("Could not create config directory: {}", e))?;
+    let aliases_file = jules_dir.join("aliases.json");
+    let json = serde_json::to_string(aliases).map_err(|e| format!("Could not serialize aliases: {}", e))?;
+    fs::write(aliases_file, json).map_err(|e| format!("Could not write aliases file: {}", e))
+}
+
+fn manage_aliases(alias: Option<String>, session_number: Option<usize>, delete: bool) -> Result<(), String> {
+    let mut aliases = read_aliases()?;
+
+    if delete {
+        if let Some(alias_name) = alias {
+            if alias_name.starts_with('@') {
+                if aliases.remove(&alias_name).is_some() {
+                    write_aliases(&aliases)?;
+                    println!("Alias '{}' deleted.", alias_name);
+                } else {
+                    return Err(format!("Alias '{}' not found.", alias_name));
+                }
+            } else {
+                return Err("Alias must start with '@'".to_string());
+            }
+        } else {
+            return Err("Alias to delete must be specified".to_string());
+        }
+    } else if let (Some(alias_name), Some(number)) = (alias, session_number) {
+        if alias_name.starts_with('@') {
+            aliases.insert(alias_name.clone(), number);
+            write_aliases(&aliases)?;
+            println!("Alias '{}' created for session {}.", alias_name, number);
+        } else {
+            return Err("Alias must start with '@'".to_string());
+        }
+    } else {
+        if aliases.is_empty() {
+            println!("No aliases found.");
+        } else {
+            println!("Aliases:");
+            for (alias, number) in aliases {
+                println!("  {} -> {}", alias, number);
+            }
+        }
+    }
+
     Ok(())
 }
 
