@@ -410,7 +410,7 @@ fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), S
         };
 
         let alias_str = if let Some(aliases) = session_aliases.get(&(i + 1)) {
-            format!(" ({})", aliases.join(", ")).yellow()
+            format!(" ({}) ", aliases.join(", ")).yellow()
         } else {
             "".yellow()
         };
