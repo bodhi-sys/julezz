@@ -114,6 +114,7 @@ enum SessionsCommands {
         #[arg(short, long)]
         source: String,
         /// The title of the session
+        #[arg(last = true)]
         title: String,
         /// Disable automatically creating a pull request
         #[arg(long)]
