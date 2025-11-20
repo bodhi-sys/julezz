@@ -118,6 +118,9 @@ enum SessionsCommands {
         /// Disable automatically creating a pull request
         #[arg(long)]
         no_auto_pr: bool,
+        /// Alias to create for the new session
+        #[arg(short, long)]
+        alias: Option<String>,
     },
     /// Get a session by index
     Get {
@@ -226,11 +229,17 @@ async fn main() {
                     }
                 }
             }
-            SessionsCommands::Create { source, title, no_auto_pr } => {
+            SessionsCommands::Create { source, title, no_auto_pr, alias } => {
                 match client.create_session(&source, &title, !no_auto_pr).await {
                     Ok(session) => {
                         println!("Session created:");
-                        println!("- {}: {} ({})", session.id, session.name, session.state.unwrap_or_default());
+                        println!("- {}: {} ({})", session.id, session.name, session.state.clone().unwrap_or_default());
+
+                        if let Some(alias_name) = alias {
+                            if let Err(e) = add_alias_for_new_session(&session, &alias_name) {
+                                eprintln!("{} {}", "Error creating alias:".red(), e);
+                            }
+                        }
                     }
                     Err(e) => {
                         handle_error(e);
@@ -495,6 +504,30 @@ fn write_aliases(aliases: &std::collections::HashMap<String, usize>) -> Result<(
     let aliases_file = jules_dir.join("aliases.json");
     let json = serde_json::to_string(aliases).map_err(|e| format!("Could not serialize aliases: {}", e))?;
     fs::write(aliases_file, json).map_err(|e| format!("Could not write aliases file: {}", e))
+}
+
+fn add_alias_for_new_session(session: &julezz::api::Session, alias_name: &str) -> Result<(), String> {
+    let config_dir = dirs::config_dir().ok_or("Could not find config directory")?;
+    let jules_dir = config_dir.join("julezz");
+    let sessions_file = jules_dir.join("sessions.json");
+
+    let mut cached_sessions: Vec<CachedSession> = if sessions_file.exists() {
+        let data = fs::read_to_string(&sessions_file).map_err(|e| format!("Could not read sessions file: {}", e))?;
+        serde_json::from_str(&data).map_err(|e| format!("Could not parse sessions file: {}", e))?
+    } else {
+        Vec::new()
+    };
+
+    cached_sessions.push(CachedSession {
+        id: session.id.clone(),
+        title: session.title.clone(),
+    });
+
+    let json = serde_json::to_string(&cached_sessions).map_err(|e| format!("Could not serialize sessions: {}", e))?;
+    fs::write(sessions_file, json).map_err(|e| format!("Could not write sessions file: {}", e))?;
+
+    let new_session_number = cached_sessions.len();
+    manage_aliases(Some(alias_name.to_string()), Some(new_session_number), false)
 }
 
 fn manage_aliases(alias: Option<String>, session_number: Option<usize>, delete: bool) -> Result<(), String> {
