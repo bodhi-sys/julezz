@@ -187,7 +187,7 @@ async fn main() {
                 match client.list_sources().await {
                     Ok(sources) => {
                         for source in sources {
-                            println!("{}", source.id);
+                            println!("{}", source.name);
                         }
                     }
                     Err(e) => {
