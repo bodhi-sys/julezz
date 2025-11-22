@@ -165,14 +165,14 @@ impl JulesClient {
         Ok(list_response.sessions)
     }
 
-    pub async fn create_session(&self, source: &str, title: &str, auto_pr: bool) -> Result<Session, JulesError> {
+    pub async fn create_session(&self, source: &str, title: &str, auto_pr: bool, branch: &str) -> Result<Session, JulesError> {
         let url = format!("{}/sessions", API_BASE_URL);
         let mut json_body = serde_json::json!({
             "prompt": title,
             "sourceContext": {
                 "source": source,
                 "githubRepoContext": {
-                    "startingBranch": "main"
+                    "startingBranch": branch
                 }
             },
             "title": title
@@ -207,6 +207,7 @@ impl JulesClient {
             .client
             .post(&url)
             .header("x-goog-api-key", &self.api_key)
+            .body("".to_string())
             .send()
             .await?;
         if !response.status().is_success() {

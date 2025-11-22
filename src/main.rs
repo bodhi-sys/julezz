@@ -116,6 +116,9 @@ enum SessionsCommands {
         /// The title of the session
         #[arg(last = true)]
         title: String,
+        /// The branch to use for the session
+        #[arg(short, long, default_value = "main")]
+        branch: String,
         /// Disable automatically creating a pull request
         #[arg(long)]
         no_auto_pr: bool,
@@ -230,8 +233,8 @@ async fn main() {
                     }
                 }
             }
-            SessionsCommands::Create { source, title, no_auto_pr, alias } => {
-                match client.create_session(&source, &title, !no_auto_pr).await {
+            SessionsCommands::Create { source, title, branch, no_auto_pr, alias } => {
+                match client.create_session(&source, &title, !no_auto_pr, &branch).await {
                     Ok(session) => {
                         println!("Session created:");
                         println!("- {}: {} ({})", session.id, session.name, session.state.clone().unwrap_or_default());
@@ -374,12 +377,13 @@ fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), S
     fs::create_dir_all(&jules_dir).map_err(|e| format!("Could not create config directory: {}", e))?;
     let sessions_file = jules_dir.join("sessions.json");
 
-    let mut cached_sessions: Vec<CachedSession> = if sessions_file.exists() {
-        let data = fs::read_to_string(&sessions_file).map_err(|e| format!("Could not read sessions file: {}", e))?;
-        serde_json::from_str(&data).map_err(|e| format!("Could not parse sessions file: {}", e))?
-    } else {
-        Vec::new()
-    };
+    let mut cached_sessions: Vec<CachedSession> = sessions_list
+        .iter()
+        .map(|s| CachedSession {
+            id: s.id.clone(),
+            title: s.title.clone(),
+        })
+        .collect();
 
     // Filter out cached sessions that are no longer in the API response
     let live_session_ids: std::collections::HashSet<_> = sessions_list.iter().map(|s| s.id.as_str()).collect();
