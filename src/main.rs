@@ -11,11 +11,11 @@ struct CachedSession {
     title: String,
 }
 
-fn resolve_session_identifier(identifier: &str) -> Result<String, String> {
+fn resolve_session_identifier_and_index(identifier: &str) -> Result<(String, usize), String> {
     if identifier.starts_with('@') {
         let aliases = read_aliases()?;
         if let Some(number) = aliases.get(identifier) {
-            resolve_session_identifier(&number.to_string())
+            resolve_session_identifier_and_index(&number.to_string())
         } else {
             Err(format!("Alias '{}' not found.", identifier))
         }
@@ -31,12 +31,16 @@ fn resolve_session_identifier(identifier: &str) -> Result<String, String> {
                 let data = fs::read_to_string(sessions_file).map_err(|_| "Could not read sessions file".to_string())?;
                 let sessions: Vec<CachedSession> = serde_json::from_str(&data).map_err(|_| "Could not parse sessions file".to_string())?;
                 if let Some(session) = sessions.get(index - 1) {
-                    return Ok(session.id.clone());
+                    return Ok((session.id.clone(), index));
                 }
             }
         }
         Err("Session index not found. Run `sessions list` to refresh the cache.".to_string())
     }
+}
+
+fn resolve_session_identifier(identifier: &str) -> Result<String, String> {
+    resolve_session_identifier_and_index(identifier).map(|(id, _index)| id)
 }
 
 /// A cool CLI for Google Jules
@@ -142,6 +146,11 @@ enum SessionsCommands {
         index: String,
         /// The prompt to send
         prompt: String,
+    },
+    /// Delete a session by index
+    Delete {
+        /// The index of the session to delete
+        index: String,
     },
 }
 
@@ -273,6 +282,27 @@ async fn main() {
                     Ok(session_id) => {
                         if let Err(e) = client.approve_plan(&session_id).await {
                             handle_error(e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{} {}", "Error:".red(), e);
+                    }
+                }
+            }
+            SessionsCommands::Delete { index } => {
+                match resolve_session_identifier_and_index(&index) {
+                    Ok((session_id, session_index)) => {
+                        match client.delete_session(&session_id).await {
+                            Ok(_) => {
+                                println!("Session {} deleted.", session_id);
+                                if let Err(e) = remove_session_from_cache(session_index).and_then(|_| update_aliases_after_deletion(session_index)) {
+                                    eprintln!("{} {}", "Error updating local state:".red(), e);
+                                    eprintln!("{}", "Your local state may be out of sync with the server.".yellow());
+                                }
+                            }
+                            Err(e) => {
+                                handle_error(e);
+                            }
                         }
                     }
                     Err(e) => {
@@ -440,6 +470,41 @@ fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), S
     }
 
     Ok(())
+}
+
+fn remove_session_from_cache(index: usize) -> Result<(), String> {
+    let config_dir = dirs::config_dir().ok_or("Could not find config directory")?;
+    let jules_dir = config_dir.join("julezz");
+    let sessions_file = jules_dir.join("sessions.json");
+
+    if sessions_file.exists() {
+        let data = fs::read_to_string(&sessions_file).map_err(|e| format!("Could not read sessions file: {}", e))?;
+        let mut sessions: Vec<CachedSession> = serde_json::from_str(&data).map_err(|e| format!("Could not parse sessions file: {}", e))?;
+        if index > 0 && index <= sessions.len() {
+            sessions.remove(index - 1);
+            let json = serde_json::to_string(&sessions).map_err(|e| format!("Could not serialize sessions: {}", e))?;
+            fs::write(sessions_file, json).map_err(|e| format!("Could not write sessions file: {}", e))?;
+        }
+    }
+    Ok(())
+}
+
+fn update_aliases_after_deletion(deleted_index: usize) -> Result<(), String> {
+    let aliases = read_aliases()?;
+    let mut updated_aliases = std::collections::HashMap::new();
+
+    for (alias, number) in aliases.iter() {
+        if *number != deleted_index {
+            let new_number = if *number > deleted_index {
+                *number - 1
+            } else {
+                *number
+            };
+            updated_aliases.insert(alias.clone(), new_number);
+        }
+    }
+
+    write_aliases(&updated_aliases)
 }
 
 fn generate_carapace_spec() -> Result<(), String> {
