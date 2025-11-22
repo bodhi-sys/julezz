@@ -153,6 +153,25 @@ impl JulesClient {
         self.handle_response(response).await
     }
 
+    pub async fn delete_session(&self, id: &str) -> Result<(), JulesError> {
+        let url = format!("{}/sessions/{}", API_BASE_URL, id);
+        let response = self
+            .client
+            .delete(&url)
+            .header("x-goog-api-key", &self.api_key)
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(JulesError::ApiError(format!(
+                "API Error: {} - {}",
+                status, text
+            )));
+        }
+        Ok(())
+    }
+
     pub async fn list_sessions(&self) -> Result<Vec<Session>, JulesError> {
         let url = format!("{}/sessions", API_BASE_URL);
         let response = self
