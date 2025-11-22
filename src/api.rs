@@ -207,7 +207,7 @@ impl JulesClient {
             .client
             .post(&url)
             .header("x-goog-api-key", &self.api_key)
-            .body("".to_string())
+            .json(&serde_json::json!({}))
             .send()
             .await?;
         if !response.status().is_success() {
