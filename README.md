@@ -1,88 +1,86 @@
-# Jules CLI
+# Julezz
 
-A cool command-line interface for interacting with the Google Jules REST API.
+Julezz is a command-line interface (CLI) for the Google Jules API, designed to streamline your workflow and provide a powerful, terminal-based experience for managing your Jules sessions.
+
+## Features
+
+- **Session Management**: List, create, and delete Jules sessions directly from your terminal.
+- **Alias System**: Create convenient shortcuts for your session IDs, making it easier to work with multiple sessions.
+- **Activity Tracking**: Fetch and view the activity history for any session.
+- **Source Management**: List and inspect available sources for creating new sessions.
+- **Shell Completions**: Generate completion scripts for your favorite shell to speed up your workflow.
 
 ## Installation
 
-1.  Ensure you have Rust and Cargo installed. If not, follow the instructions at [rustup.rs](https://rustup.rs/).
-2.  Clone this repository: `git clone <repository-url>`
-3.  Navigate to the project directory: `cd jules-cli`
-4.  Build the project: `cargo build --release`
-5.  The executable will be located at `target/release/jules-cli`.
+To build Julezz from source, you will need to have the Rust toolchain installed. You can install it from [rustup.rs](https://rustup.rs/).
 
-## Configuration
+Once you have Rust installed, you can clone this repository and build the project:
 
-To use the Jules CLI, you need to provide your Google API key. You can do this in two ways:
+```bash
+git clone https://github.com/your-username/julezz.git
+cd julezz
+cargo build --release
+```
 
-1.  **Command-line flag:** Use the `--api-key` flag with any command:
+The compiled binary will be located at `target/release/julezz`. You can copy this binary to a location in your `PATH` (e.g., `/usr/local/bin`) to make it accessible from anywhere in your terminal.
+
+## Authentication
+
+Julezz requires a Google API key to authenticate with the Jules API. You can provide this key in one of two ways:
+
+1.  **Environment Variable**: Set the `JULES_API_KEY` environment variable to your API key.
 
     ```bash
-    jules-cli --api-key YOUR_API_KEY sources
+    export JULES_API_KEY="your-api-key"
     ```
 
-2.  **Environment variable:** Set the `JULES_API_KEY` environment variable:
+2.  **Command-Line Flag**: Use the `--api-key` flag when running any command.
 
     ```bash
-    export JULES_API_KEY=YOUR_API_KEY
-    jules-cli sources
+    julezz --api-key "your-api-key" sessions list
     ```
 
 ## Usage
 
-### Sources
-
-List all available sources:
-
-```bash
-jules-cli sources
-```
+Here is a brief overview of the available commands. For more detailed information, you can use the `--help` flag with any command (e.g., `julezz sessions --help`).
 
 ### Sessions
 
-**List all sessions:**
-
-```bash
-jules-cli sessions list
-```
-
-**Create a new session:**
-
-```bash
-jules-cli sessions create --source <SOURCE_ID>
-```
-
-**Get a specific session:**
-
-First, run `sessions list` to see the available sessions and their indices. Then, use the index to get a specific session:
-
-```bash
-jules-cli sessions get 1
-```
-
-**Approve a plan for a session:**
-
-```bash
-jules-cli sessions approve-plan 1
-```
-
-**Send a message to a session:**
-
-```bash
-jules-cli sessions send-message 1 "Your message here"
-```
+-   **List Sessions**: `julezz sessions list`
+    -   Displays a list of all your Jules sessions, along with their indices, IDs, and any associated aliases.
+-   **Create a Session**: `julezz sessions create --source <source> --branch <branch> "<title>"`
+    -   Creates a new session with the specified source, branch, and title.
+-   **Delete a Session**: `julezz sessions delete <index|alias>`
+    -   Deletes a session by its index or alias.
+-   **Manage Aliases**:
+    -   `julezz sessions alias`: Lists all aliases.
+    -   `julezz sessions alias @my-alias <index>`: Creates an alias for a session.
+    -   `julezz sessions alias --delete @my-alias`: Deletes an alias.
 
 ### Activities
 
-**List all activities for a session:**
+-   **Fetch Activities**: `julezz activities fetch <index|alias>`
+    -   Fetches and caches the full activity history for a session.
+-   **List Activities**: `julezz activities list <index|alias>`
+    -   Displays the most recent activities for a session from the local cache.
 
-First, run `sessions list` to see the available sessions and their indices. Then, use the index to list the activities for a specific session:
+### Sources
+
+-   **List Sources**: `julezz sources list`
+    -   Lists all available sources that you can use to create new sessions.
+
+## Alias System
+
+The alias system allows you to assign a memorable name to a session ID. This is particularly useful when you are working with multiple sessions, as it saves you from having to remember or look up session IDs.
+
+Aliases are linked to the permanent session ID, not the temporary index shown in the `sessions list` command. This means that even if you delete a session, your aliases for other sessions will remain valid.
+
+## Shell Completions
+
+Julezz can generate completion scripts for various shells, including Bash, Zsh, Fish, and PowerShell. To generate a script, use the `completions` command:
 
 ```bash
-jules-cli activities list 1
+julezz completions <your-shell>
 ```
 
-**Get a specific activity:**
-
-```bash
-jules-cli activities get 1 <ACTIVITY_ID>
-```
+Follow the instructions provided by the command to install the completion script for your shell.
