@@ -16,13 +16,28 @@
 
 use clap::{CommandFactory, Parser};
 use colored::Colorize;
-use julezz::api::{handle_error, JulesClient};
+use julezz::api::{handle_error, JulesClient, Session};
 use std::io;
 
 mod bot;
 use julezz::cache::{Cache, CachedSession};
-use julezz::api::Session;
 use julezz::resolve::{resolve_session_identifier, resolve_session_identifier_and_index};
+
+fn get_sessions_from_cache() -> Result<Vec<Session>, String> {
+    let cache = Cache::new()?;
+    let sessions = cache.read_sessions()?;
+    let api_sessions: Vec<Session> = sessions
+        .into_iter()
+        .map(|s| Session {
+            name: s.title.clone(),
+            id: s.id,
+            state: None,
+            title: s.title,
+            source_context: s.source_context,
+        })
+        .collect();
+    Ok(api_sessions)
+}
 
 /// A cool CLI for Google Jules
 #[derive(Parser, Debug)]
@@ -52,11 +67,6 @@ enum Commands {
     Activities {
         #[command(subcommand)]
         command: ActivitiesCommands,
-    },
-    /// Start the Telegram bot
-    Bot {
-        #[command(subcommand)]
-        command: BotCommands,
     },
     /// Generate shell completions
     Completions {
@@ -167,12 +177,6 @@ enum ActivitiesCommands {
     },
 }
 
-#[derive(clap::Subcommand, Debug)]
-enum BotCommands {
-    /// Start the bot
-    Start,
-}
-
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
@@ -252,27 +256,22 @@ async fn main() {
                 }
             }
             SessionsCommands::Get { index } => {
-                let cache = Cache::new().unwrap();
-                let sessions = cache.read_sessions().unwrap();
-                let api_sessions: Vec<Session> = sessions
-                    .into_iter()
-                    .map(|s| Session {
-                        name: s.title.clone(),
-                        id: s.id,
-                        state: None,
-                        title: s.title,
-                        source_context: s.source_context,
-                    })
-                    .collect();
-                match resolve_session_identifier(&index, &api_sessions) {
-                    Ok(session_id) => {
-                        match client.get_session(&session_id).await {
-                            Ok(session) => {
-                                println!("Session:");
-                                println!("- {}: {} ({})", session.id, session.name, session.state.unwrap_or_default());
+                match get_sessions_from_cache() {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&index, &sessions) {
+                            Ok(session_id) => {
+                                match client.get_session(&session_id).await {
+                                    Ok(session) => {
+                                        println!("Session:");
+                                        println!("- {}: {} ({})", session.id, session.name, session.state.unwrap_or_default());
+                                    }
+                                    Err(e) => {
+                                        handle_error(e);
+                                    }
+                                }
                             }
                             Err(e) => {
-                                handle_error(e);
+                                eprintln!("{} {}", "Error:".red(), e);
                             }
                         }
                     }
@@ -282,22 +281,17 @@ async fn main() {
                 }
             }
             SessionsCommands::ApprovePlan { index } => {
-                let cache = Cache::new().unwrap();
-                let sessions = cache.read_sessions().unwrap();
-                let api_sessions: Vec<Session> = sessions
-                    .into_iter()
-                    .map(|s| Session {
-                        name: s.title.clone(),
-                        id: s.id,
-                        state: None,
-                        title: s.title,
-                        source_context: s.source_context,
-                    })
-                    .collect();
-                match resolve_session_identifier(&index, &api_sessions) {
-                    Ok(session_id) => {
-                        if let Err(e) = client.approve_plan(&session_id).await {
-                            handle_error(e);
+                match get_sessions_from_cache() {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&index, &sessions) {
+                            Ok(session_id) => {
+                                if let Err(e) = client.approve_plan(&session_id).await {
+                                    handle_error(e);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("{} {}", "Error:".red(), e);
+                            }
                         }
                     }
                     Err(e) => {
@@ -306,30 +300,25 @@ async fn main() {
                 }
             }
             SessionsCommands::Delete { index } => {
-                let cache = Cache::new().unwrap();
-                let sessions = cache.read_sessions().unwrap();
-                let api_sessions: Vec<Session> = sessions
-                    .into_iter()
-                    .map(|s| Session {
-                        name: s.title.clone(),
-                        id: s.id,
-                        state: None,
-                        title: s.title,
-                        source_context: s.source_context,
-                    })
-                    .collect();
-                match resolve_session_identifier_and_index(&index, &api_sessions) {
-                    Ok((session_id, session_index)) => {
-                        match client.delete_session(&session_id).await {
-                            Ok(_) => {
-                                println!("Session {} deleted.", session_id);
-                                if let Err(e) = remove_session_from_cache(session_index).and_then(|_| update_aliases_after_deletion(&session_id)) {
-                                    eprintln!("{} {}", "Error updating local state:".red(), e);
-                                    eprintln!("{}", "Your local state may be out of sync with the server.".yellow());
+                match get_sessions_from_cache() {
+                    Ok(sessions) => {
+                        match resolve_session_identifier_and_index(&index, &sessions) {
+                            Ok((session_id, session_index)) => {
+                                match client.delete_session(&session_id).await {
+                                    Ok(_) => {
+                                        println!("Session {} deleted.", session_id);
+                                        if let Err(e) = remove_session_from_cache(session_index).and_then(|_| update_aliases_after_deletion(&session_id)) {
+                                            eprintln!("{} {}", "Error updating local state:".red(), e);
+                                            eprintln!("{}", "Your local state may be out of sync with the server.".yellow());
+                                        }
+                                    }
+                                    Err(e) => {
+                                        handle_error(e);
+                                    }
                                 }
                             }
                             Err(e) => {
-                                handle_error(e);
+                                eprintln!("{} {}", "Error:".red(), e);
                             }
                         }
                     }
@@ -339,22 +328,17 @@ async fn main() {
                 }
             }
             SessionsCommands::SendMessage { index, prompt } => {
-                let cache = Cache::new().unwrap();
-                let sessions = cache.read_sessions().unwrap();
-                let api_sessions: Vec<Session> = sessions
-                    .into_iter()
-                    .map(|s| Session {
-                        name: s.title.clone(),
-                        id: s.id,
-                        state: None,
-                        title: s.title,
-                        source_context: s.source_context,
-                    })
-                    .collect();
-                match resolve_session_identifier(&index, &api_sessions) {
-                    Ok(session_id) => {
-                        if let Err(e) = client.send_message(&session_id, &prompt).await {
-                            handle_error(e);
+                match get_sessions_from_cache() {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&index, &sessions) {
+                            Ok(session_id) => {
+                                if let Err(e) = client.send_message(&session_id, &prompt).await {
+                                    handle_error(e);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("{} {}", "Error:".red(), e);
+                            }
                         }
                     }
                     Err(e) => {
@@ -365,28 +349,23 @@ async fn main() {
         },
         Commands::Activities { command } => match command {
             ActivitiesCommands::Fetch { index } => {
-                let cache = Cache::new().unwrap();
-                let sessions = cache.read_sessions().unwrap();
-                let api_sessions: Vec<Session> = sessions
-                    .clone()
-                    .into_iter()
-                    .map(|s| Session {
-                        name: s.title.clone(),
-                        id: s.id,
-                        state: None,
-                        title: s.title,
-                        source_context: s.source_context,
-                    })
-                    .collect();
-                match resolve_session_identifier_and_index(&index, &api_sessions) {
-                    Ok((session_id, session_index)) => {
-                        let session = sessions.into_iter().nth(session_index - 1).unwrap();
-                        match client.fetch_activities(&session_id).await {
-                            Ok(activities) => {
-                                print_activities(&activities, activities.len(), &session);
+                match get_sessions_from_cache() {
+                    Ok(sessions) => {
+                        match resolve_session_identifier_and_index(&index, &sessions) {
+                            Ok((session_id, session_index)) => {
+                                let cache = Cache::new().unwrap();
+                                let session = cache.read_sessions().unwrap().remove(session_index - 1);
+                                match client.fetch_activities(&session_id).await {
+                                    Ok(activities) => {
+                                        print_activities(&activities, activities.len(), &session);
+                                    }
+                                    Err(e) => {
+                                        handle_error(e);
+                                    }
+                                }
                             }
                             Err(e) => {
-                                handle_error(e);
+                                eprintln!("{} {}", "Error:".red(), e);
                             }
                         }
                     }
@@ -396,34 +375,29 @@ async fn main() {
                 }
             }
             ActivitiesCommands::List { index, n, r } => {
-                let cache = Cache::new().unwrap();
-                let sessions = cache.read_sessions().unwrap();
-                let api_sessions: Vec<Session> = sessions
-                    .clone()
-                    .into_iter()
-                    .map(|s| Session {
-                        name: s.title.clone(),
-                        id: s.id,
-                        state: None,
-                        title: s.title,
-                        source_context: s.source_context,
-                    })
-                    .collect();
-                match resolve_session_identifier_and_index(&index, &api_sessions) {
-                    Ok((session_id, session_index)) => {
-                        let session = sessions.into_iter().nth(session_index - 1).unwrap();
-                        let activities_result = if r {
-                            client.fetch_activities(&session_id).await
-                        } else {
-                            client.list_cached_activities(&session_id)
-                        };
+                match get_sessions_from_cache() {
+                    Ok(sessions) => {
+                        match resolve_session_identifier_and_index(&index, &sessions) {
+                            Ok((session_id, session_index)) => {
+                                let cache = Cache::new().unwrap();
+                                let session = cache.read_sessions().unwrap().remove(session_index - 1);
+                                let activities_result = if r {
+                                    client.fetch_activities(&session_id).await
+                                } else {
+                                    client.list_cached_activities(&session_id)
+                                };
 
-                        match activities_result {
-                            Ok(activities) => {
-                                print_activities(&activities, n, &session);
+                                match activities_result {
+                                    Ok(activities) => {
+                                        print_activities(&activities, n, &session);
+                                    }
+                                    Err(e) => {
+                                        handle_error(e);
+                                    }
+                                }
                             }
                             Err(e) => {
-                                handle_error(e);
+                                eprintln!("{} {}", "Error:".red(), e);
                             }
                         }
                     }
@@ -433,27 +407,22 @@ async fn main() {
                 }
             }
             ActivitiesCommands::Get { index, id } => {
-                let cache = Cache::new().unwrap();
-                let sessions = cache.read_sessions().unwrap();
-                let api_sessions: Vec<Session> = sessions
-                    .into_iter()
-                    .map(|s| Session {
-                        name: s.title.clone(),
-                        id: s.id,
-                        state: None,
-                        title: s.title,
-                        source_context: s.source_context,
-                    })
-                    .collect();
-                match resolve_session_identifier(&index, &api_sessions) {
-                    Ok(session_id) => {
-                        match client.get_activity(&session_id, &id).await {
-                            Ok(activity) => {
-                                println!("Activity {}:", id);
-                                println!("- {}: {}", activity.id, activity.name);
+                match get_sessions_from_cache() {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&index, &sessions) {
+                            Ok(session_id) => {
+                                match client.get_activity(&session_id, &id).await {
+                                    Ok(activity) => {
+                                        println!("Activity {}:", id);
+                                        println!("- {}: {}", activity.id, activity.name);
+                                    }
+                                    Err(e) => {
+                                        handle_error(e);
+                                    }
+                                }
                             }
                             Err(e) => {
-                                handle_error(e);
+                                eprintln!("{} {}", "Error:".red(), e);
                             }
                         }
                     }
@@ -461,11 +430,6 @@ async fn main() {
                         eprintln!("{} {}", "Error:".red(), e);
                     }
                 }
-            }
-        },
-        Commands::Bot { command } => match command {
-            BotCommands::Start => {
-                bot::start_bot().await;
             }
         },
         Commands::Completions { shell } => {
@@ -685,19 +649,9 @@ fn manage_aliases(
         }
     } else if let (Some(alias_name), Some(number)) = (alias, session_number) {
         if alias_name.starts_with('@') {
-            let sessions = cache.read_sessions()?;
-            let api_sessions: Vec<Session> = sessions
-                .into_iter()
-                .map(|s| Session {
-                    name: s.title.clone(),
-                    id: s.id,
-                    state: None,
-                    title: s.title,
-                    source_context: s.source_context,
-                })
-                .collect();
+            let sessions = get_sessions_from_cache()?;
             let (session_id, _) =
-                resolve_session_identifier_and_index(&number.to_string(), &api_sessions)?;
+                resolve_session_identifier_and_index(&number.to_string(), &sessions)?;
             aliases.insert(alias_name.clone(), session_id.clone());
             cache.write_aliases(&aliases)?;
             println!(

@@ -38,6 +38,8 @@ enum Command {
     Send(String),
     #[command(description = "authenticate with your Jules API key.")]
     Auth(String),
+    #[command(description = "get your Telegram chat ID.")]
+    Whoami,
 }
 
 async fn answer(
@@ -61,6 +63,10 @@ async fn answer(
             } else {
                 bot.send_message(msg.chat.id, "Authentication failed: Invalid API key.").await?;
             }
+        }
+        Command::Whoami => {
+            bot.send_message(msg.chat.id, format!("Your chat ID is: `{}`", msg.chat.id))
+                .await?;
         }
         Command::List => {
             if let Some(client) = &*client.lock().await {
@@ -197,18 +203,25 @@ pub async fn start_bot() {
                             let notification_message = if let Some(agent_messaged) = &last_activity.agent_messaged {
                                 Some(format!(
                                     "New message in session *{}*:\n{}",
-                                    session.title, escape_markdown_v2(&agent_messaged.agent_message)
+                                    escape_markdown_v2(&session.title),
+                                    escape_markdown_v2(&agent_messaged.agent_message)
                                 ))
                             } else if last_activity.plan_generated.is_some() {
-                                Some(format!("Plan generated for session *{}*.", session.title))
+                                Some(format!(
+                                    "Plan generated for session *{}*.",
+                                    escape_markdown_v2(&session.title)
+                                ))
                             } else if let Some(progress) = &last_activity.progress_updated {
                                 Some(format!(
                                     "Progress update for session *{}*:\n{}",
-                                    session.title,
+                                    escape_markdown_v2(&session.title),
                                     escape_markdown_v2(progress.title.as_deref().unwrap_or("No title"))
                                 ))
                             } else if last_activity.artifacts.is_some() {
-                                Some(format!("New artifacts generated for session *{}*.", session.title))
+                                Some(format!(
+                                    "New artifacts generated for session *{}*.",
+                                    escape_markdown_v2(&session.title)
+                                ))
                             } else {
                                 None
                             };
