@@ -36,37 +36,45 @@ enum Command {
     List,
     #[command(description = "send a message to a session.")]
     Send(String),
+    #[command(description = "authenticate with your Jules API key.")]
+    Auth(String),
 }
 
 async fn answer(
     bot: Bot,
     msg: Message,
     cmd: Command,
-    client: Arc<JulesClient>,
+    client: Arc<Mutex<Option<JulesClient>>>,
     cache: Arc<Cache>,
 ) -> ResponseResult<()> {
     match cmd {
         Command::Help => {
             bot.send_message(msg.chat.id, Command::descriptions().to_string()).await?;
         }
+        Command::Auth(api_key) => {
+            let mut client_guard = client.lock().await;
+            *client_guard = Some(JulesClient::new(Some(api_key)).expect("Failed to create JulesClient"));
+            bot.send_message(msg.chat.id, "Authentication successful!").await?;
+        }
         Command::List => {
-            let aliases = match cache.read_aliases() {
-                Ok(aliases) => aliases,
-                Err(e) => {
-                    log::error!("Failed to read aliases: {:?}", e);
-                    bot.send_message(msg.chat.id, "Sorry, something went wrong while reading your aliases.").await?;
-                    return Ok(());
+            if let Some(client) = &*client.lock().await {
+                let aliases = match cache.read_aliases() {
+                    Ok(aliases) => aliases,
+                    Err(e) => {
+                        log::error!("Failed to read aliases: {:?}", e);
+                        bot.send_message(msg.chat.id, "Sorry, something went wrong while reading your aliases.").await?;
+                        return Ok(());
+                    }
+                };
+                let mut session_aliases: std::collections::HashMap<String, Vec<String>> =
+                    std::collections::HashMap::new();
+                for (alias, session_id) in aliases {
+                    session_aliases.entry(session_id).or_default().push(alias);
                 }
-            };
-            let mut session_aliases: std::collections::HashMap<String, Vec<String>> =
-                std::collections::HashMap::new();
-            for (alias, session_id) in aliases {
-                session_aliases.entry(session_id).or_default().push(alias);
-            }
 
-            match client.list_sessions().await {
-                Ok(sessions) => {
-                    let mut response = String::from("To send a message, use `/send <session_id_or_alias> <message>`.\n\nAvailable sessions:\n");
+                match client.list_sessions().await {
+                    Ok(sessions) => {
+                        let mut response = String::from("To send a message, use `/send <session_id_or_alias> <message>`.\n\nAvailable sessions:\n");
                     for session in sessions {
                         let alias_str = if let Some(aliases) = session_aliases.get(&session.id) {
                             format!(" ({})", aliases.join(", "))
@@ -82,30 +90,37 @@ async fn answer(
                     bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sessions.").await?;
                 }
             }
+            } else {
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            }
         }
         Command::Send(text) => {
-            let parts: Vec<&str> = text.splitn(2, ' ').collect();
-            if parts.len() == 2 {
-                let identifier = parts[0];
-                let prompt = parts[1];
-                match resolve_session_identifier(identifier) {
-                    Ok(session_id) => {
-                        match client.send_message(&session_id, prompt).await {
-                            Ok(_) => {
-                                bot.send_message(msg.chat.id, "Message sent successfully!").await?;
-                            }
-                            Err(e) => {
-                                log::error!("Failed to send message: {:?}", e);
-                                bot.send_message(msg.chat.id, "Sorry, something went wrong while sending your message.").await?;
+            if let Some(client) = &*client.lock().await {
+                let parts: Vec<&str> = text.splitn(2, ' ').collect();
+                if parts.len() == 2 {
+                    let identifier = parts[0];
+                    let prompt = parts[1];
+                    match resolve_session_identifier(identifier) {
+                        Ok(session_id) => {
+                            match client.send_message(&session_id, prompt).await {
+                                Ok(_) => {
+                                    bot.send_message(msg.chat.id, "Message sent successfully!").await?;
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to send message: {:?}", e);
+                                    bot.send_message(msg.chat.id, "Sorry, something went wrong while sending your message.").await?;
+                                }
                             }
                         }
+                        Err(e) => {
+                            bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
+                        }
                     }
-                    Err(e) => {
-                        bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
-                    }
+                } else {
+                    bot.send_message(msg.chat.id, "Invalid format. Use: /send <session_id_or_alias> <message>").await?;
                 }
             } else {
-                bot.send_message(msg.chat.id, "Invalid format. Use: /send <session_id_or_alias> <message>").await?;
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
             }
         }
     };
@@ -118,8 +133,7 @@ pub async fn start_bot() {
     pretty_env_logger::init();
     log::info!("Starting command bot...");
 
-    let api_key = env::var("JULES_API_KEY").expect("JULES_API_KEY must be set");
-    let client = Arc::new(JulesClient::new(Some(api_key)).expect("Failed to create JulesClient"));
+    let client: Arc<Mutex<Option<JulesClient>>> = Arc::new(Mutex::new(None));
 
     let bot = Bot::from_env();
 
@@ -141,8 +155,9 @@ pub async fn start_bot() {
         loop {
             interval.tick().await;
 
-            log::info!("Checking for new activities...");
-            let sessions = match client_for_task.list_sessions().await {
+            if let Some(client) = &*client_for_task.lock().await {
+                log::info!("Checking for new activities...");
+                let sessions = match client.list_sessions().await {
                     Ok(sessions) => sessions,
                     Err(e) => {
                         log::error!("Failed to list sessions for activity check: {:?}", e);
@@ -151,7 +166,7 @@ pub async fn start_bot() {
                 };
 
                 for session in sessions {
-                    let activities = match client_for_task.fetch_activities(&session.id).await {
+                    let activities = match client.fetch_activities(&session.id).await {
                         Ok(activities) => activities,
                         Err(e) => {
                             log::error!("Failed to fetch activities for session {}: {:?}", session.id, e);
@@ -177,6 +192,7 @@ pub async fn start_bot() {
                         }
                     }
                 }
+            }
         }
     });
 
