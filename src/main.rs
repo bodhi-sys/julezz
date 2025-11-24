@@ -20,72 +20,8 @@ use julezz::api::{handle_error, JulesClient};
 use std::io;
 
 mod bot;
-mod cache;
-use cache::{Cache, CachedSession};
-
-/// Resolves a session identifier (index or alias) to a session ID and its 1-based index.
-///
-/// This function is the central point for resolving user-provided session
-/// identifiers. It handles both numeric indices and aliases (e.g., `@my-session`).
-///
-/// # Arguments
-///
-/// * `identifier` - The session identifier to resolve.
-///
-/// # Returns
-///
-/// A `Result` containing a tuple of the session ID and its 1-based index,
-/// or an error string if the identifier cannot be resolved.
-fn resolve_session_identifier_and_index(identifier: &str) -> Result<(String, usize), String> {
-    let cache = Cache::new()?;
-    let sessions = cache.read_sessions()?;
-
-    if sessions.is_empty() {
-        return Err("No sessions found in cache. Run `sessions list` to refresh.".to_string());
-    }
-
-    if identifier.starts_with('@') {
-        let aliases = cache.read_aliases()?;
-        let session_id = aliases
-            .get(identifier)
-            .ok_or_else(|| format!("Alias '{}' not found.", identifier))?;
-
-        sessions
-            .iter()
-            .position(|s| s.id == *session_id)
-            .map(|index| (session_id.clone(), index + 1))
-            .ok_or_else(|| {
-                format!(
-                    "Session ID '{}' for alias '{}' not found in cache. Run `sessions list`.",
-                    session_id, identifier
-                )
-            })
-    } else {
-        let index: usize = identifier
-            .parse()
-            .map_err(|_| "Invalid index format".to_string())?;
-
-        if index == 0 {
-            return Err("Index must be greater than 0".to_string());
-        }
-
-        sessions
-            .get(index - 1)
-            .map(|session| (session.id.clone(), index))
-            .ok_or_else(|| {
-                "Session index out of bounds. Run `sessions list` to see available sessions."
-                    .to_string()
-            })
-    }
-}
-
-/// Resolves a session identifier to a session ID.
-///
-/// This is a convenience function that calls `resolve_session_identifier_and_index`
-/// and returns only the session ID.
-fn resolve_session_identifier(identifier: &str) -> Result<String, String> {
-    resolve_session_identifier_and_index(identifier).map(|(id, _index)| id)
-}
+use julezz::cache::{Cache, CachedSession};
+use julezz::resolve::{resolve_session_identifier, resolve_session_identifier_and_index};
 
 /// A cool CLI for Google Jules
 #[derive(Parser, Debug)]

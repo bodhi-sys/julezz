@@ -1,10 +1,31 @@
 // src/bot.rs
 
-use teloxide::{prelude::*, utils::command::BotCommands};
+use teloxide::{prelude::*, types::ParseMode, utils::command::BotCommands};
 use dotenv::dotenv;
+use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::time::{self, Duration};
 use julezz::api::JulesClient;
+use julezz::cache::Cache;
+use julezz::resolve::resolve_session_identifier;
+
+fn escape_markdown_v2(text: &str) -> String {
+    let mut escaped = String::new();
+    for ch in text.chars() {
+        match ch {
+            '_' | '*' | '[' | ']' | '(' | ')' | '~' | '`' | '>' | '#' | '+' | '-' | '=' | '|' | '{' | '}' | '.' | '!' => {
+                escaped.push('\\');
+                escaped.push(ch);
+            }
+            _ => {
+                escaped.push(ch);
+            }
+        }
+    }
+    escaped
+}
 
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase", description = "These commands are supported:")]
@@ -17,17 +38,42 @@ enum Command {
     Send(String),
 }
 
-async fn answer(bot: Bot, msg: Message, cmd: Command, client: Arc<JulesClient>) -> ResponseResult<()> {
+async fn answer(
+    bot: Bot,
+    msg: Message,
+    cmd: Command,
+    client: Arc<JulesClient>,
+    cache: Arc<Cache>,
+) -> ResponseResult<()> {
     match cmd {
         Command::Help => {
             bot.send_message(msg.chat.id, Command::descriptions().to_string()).await?;
         }
         Command::List => {
+            let aliases = match cache.read_aliases() {
+                Ok(aliases) => aliases,
+                Err(e) => {
+                    log::error!("Failed to read aliases: {:?}", e);
+                    bot.send_message(msg.chat.id, "Sorry, something went wrong while reading your aliases.").await?;
+                    return Ok(());
+                }
+            };
+            let mut session_aliases: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
+            for (alias, session_id) in aliases {
+                session_aliases.entry(session_id).or_default().push(alias);
+            }
+
             match client.list_sessions().await {
                 Ok(sessions) => {
-                    let mut response = String::from("To send a message, use `/send <session_id> <message>`.\n\nAvailable sessions:\n");
+                    let mut response = String::from("To send a message, use `/send <session_id_or_alias> <message>`.\n\nAvailable sessions:\n");
                     for session in sessions {
-                        response.push_str(&format!("- `{}`: {}\n", session.id, session.title));
+                        let alias_str = if let Some(aliases) = session_aliases.get(&session.id) {
+                            format!(" ({})", aliases.join(", "))
+                        } else {
+                            "".to_string()
+                        };
+                        response.push_str(&format!("- `{}`{}: {}\n", session.id, alias_str, session.title));
                     }
                     bot.send_message(msg.chat.id, response).await?;
                 }
@@ -40,19 +86,26 @@ async fn answer(bot: Bot, msg: Message, cmd: Command, client: Arc<JulesClient>) 
         Command::Send(text) => {
             let parts: Vec<&str> = text.splitn(2, ' ').collect();
             if parts.len() == 2 {
-                let session_id = parts[0];
+                let identifier = parts[0];
                 let prompt = parts[1];
-                match client.send_message(session_id, prompt).await {
-                    Ok(_) => {
-                        bot.send_message(msg.chat.id, "Message sent successfully!").await?;
+                match resolve_session_identifier(identifier) {
+                    Ok(session_id) => {
+                        match client.send_message(&session_id, prompt).await {
+                            Ok(_) => {
+                                bot.send_message(msg.chat.id, "Message sent successfully!").await?;
+                            }
+                            Err(e) => {
+                                log::error!("Failed to send message: {:?}", e);
+                                bot.send_message(msg.chat.id, "Sorry, something went wrong while sending your message.").await?;
+                            }
+                        }
                     }
                     Err(e) => {
-                        log::error!("Failed to send message: {:?}", e);
-                        bot.send_message(msg.chat.id, "Sorry, something went wrong while sending your message.").await?;
+                        bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
                     }
                 }
             } else {
-                bot.send_message(msg.chat.id, "Invalid format. Use: /send <session_id> <message>").await?;
+                bot.send_message(msg.chat.id, "Invalid format. Use: /send <session_id_or_alias> <message>").await?;
             }
         }
     };
@@ -70,11 +123,70 @@ pub async fn start_bot() {
 
     let bot = Bot::from_env();
 
+    let chat_id = env::var("TELEGRAM_CHAT_ID").expect("TELEGRAM_CHAT_ID must be set");
+    let chat_id = ChatId(chat_id.parse().expect("TELEGRAM_CHAT_ID must be an integer"));
+    let last_activities = Arc::new(Mutex::new(HashMap::<String, String>::new()));
+
+    let bot_for_task = bot.clone();
+    let client_for_task = client.clone();
+    let last_activities_for_task = last_activities.clone();
+
+    let poll_interval_seconds = env::var("JULEZZ_POLL_INTERVAL_SECONDS")
+        .unwrap_or_else(|_| "30".to_string())
+        .parse()
+        .expect("JULEZZ_POLL_INTERVAL_SECONDS must be an integer");
+
+    tokio::spawn(async move {
+        let mut interval = time::interval(Duration::from_secs(poll_interval_seconds));
+        loop {
+            interval.tick().await;
+
+            log::info!("Checking for new activities...");
+            let sessions = match client_for_task.list_sessions().await {
+                    Ok(sessions) => sessions,
+                    Err(e) => {
+                        log::error!("Failed to list sessions for activity check: {:?}", e);
+                        continue;
+                    }
+                };
+
+                for session in sessions {
+                    let activities = match client_for_task.fetch_activities(&session.id).await {
+                        Ok(activities) => activities,
+                        Err(e) => {
+                            log::error!("Failed to fetch activities for session {}: {:?}", session.id, e);
+                            continue;
+                        }
+                    };
+
+                    if let Some(last_activity) = activities.iter().filter(|a| a.originator == "agent").last() {
+                        let mut last_activities = last_activities_for_task.lock().await;
+                        let last_seen_activity_id = last_activities.get(&session.id).cloned();
+
+                        if last_seen_activity_id.as_deref() != Some(&last_activity.id) {
+                            if let Some(agent_messaged) = &last_activity.agent_messaged {
+                                let message = format!(
+                                    "New message in session *{}*:\n{}",
+                                    session.title, escape_markdown_v2(&agent_messaged.agent_message)
+                                );
+                                if let Err(e) = bot_for_task.send_message(chat_id, &message).parse_mode(ParseMode::MarkdownV2).await {
+                                    log::error!("Failed to send notification: {:?}", e);
+                                }
+                            }
+                            last_activities.insert(session.id.clone(), last_activity.id.clone());
+                        }
+                    }
+                }
+        }
+    });
+
+    let cache = Arc::new(Cache::new().expect("Failed to create cache"));
+
     let handler = Update::filter_message()
         .branch(dptree::entry().filter_command::<Command>().endpoint(answer));
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![client])
+        .dependencies(dptree::deps![client, cache])
         .enable_ctrlc_handler()
         .build()
         .dispatch()

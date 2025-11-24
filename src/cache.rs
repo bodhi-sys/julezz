@@ -1,3 +1,4 @@
+use crate::api;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -35,7 +36,7 @@ pub struct CachedSession {
     pub title: String,
     /// The source context of the session.
     #[serde(rename = "sourceContext")]
-    pub source_context: Option<julezz::api::SourceContext>,
+    pub source_context: Option<api::SourceContext>,
 }
 
 /// A type alias for a map of aliases to their corresponding session IDs.

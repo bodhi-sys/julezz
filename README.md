@@ -71,19 +71,24 @@ Here is a brief overview of the available commands. For more detailed informatio
 
 ### Telegram Bot
 
-Julezz includes a Telegram bot for interacting with your sessions in a conversational way.
+Julezz includes a Telegram bot for interacting with your sessions in a conversational way. The bot can also send you notifications when there are new messages from the agent.
 
 **Setup**
 
 1.  **Create a Telegram Bot**: Talk to the [BotFather](https://t.me/botfather) on Telegram to create a new bot. You will receive a token; keep it safe.
-2.  **Set Environment Variables**: The bot requires two environment variables to be set:
+2.  **Find Your Chat ID**: Talk to the `@userinfobot` on Telegram to find your user ID. This will be your chat ID.
+3.  **Set Environment Variables**: The bot requires the following environment variables to be set:
     *   `TELOXIDE_TOKEN`: The token you received from the BotFather.
     *   `JULES_API_KEY`: Your Google API key for the Jules API.
+    *   `TELEGRAM_CHAT_ID`: Your chat ID, which the bot will use to send you notifications.
+    *   `JULEZZ_POLL_INTERVAL_SECONDS` (optional): The interval in seconds at which the bot checks for new messages. Defaults to 30.
 
     You can set these in your shell or create a `.env` file in the project's root directory:
     ```
     TELOXIDE_TOKEN=your-telegram-bot-token
     JULES_API_KEY=your-api-key
+    TELEGRAM_CHAT_ID=your-chat-id
+    JULEZZ_POLL_INTERVAL_SECONDS=30
     ```
 
 **Running the Bot**
@@ -100,13 +105,13 @@ The bot will start listening for commands.
 
 -   `/help`: Shows a list of all available commands.
 -   `/list`: Displays all your active Jules sessions. The output will show the session ID and title for each session.
--   `/send <session_id> <message>`: Sends a message to a specific session.
-    -   `<session_id>`: The full ID of the session you want to send a message to (you can get this from the `/list` command).
+-   `/send <identifier> <message>`: Sends a message to a specific session.
+    -   `<identifier>`: The session's ID, alias (e.g., `@my-session`), or numeric index from the `julezz sessions list` command.
     -   `<message>`: The text you want to send.
 
     *Example*:
     ```
-    /send 1234567890abcdef Hello, can you help me with a new feature?
+    /send @my-session Hello, can you help me with a new feature?
     ```
 
 ## Alias System
