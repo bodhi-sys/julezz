@@ -69,6 +69,46 @@ Here is a brief overview of the available commands. For more detailed informatio
 -   **List Sources**: `julezz sources list`
     -   Lists all available sources that you can use to create new sessions.
 
+### Telegram Bot
+
+Julezz includes a Telegram bot for interacting with your sessions in a conversational way.
+
+**Setup**
+
+1.  **Create a Telegram Bot**: Talk to the [BotFather](https://t.me/botfather) on Telegram to create a new bot. You will receive a token; keep it safe.
+2.  **Set Environment Variables**: The bot requires two environment variables to be set:
+    *   `TELOXIDE_TOKEN`: The token you received from the BotFather.
+    *   `JULES_API_KEY`: Your Google API key for the Jules API.
+
+    You can set these in your shell or create a `.env` file in the project's root directory:
+    ```
+    TELOXIDE_TOKEN=your-telegram-bot-token
+    JULES_API_KEY=your-api-key
+    ```
+
+**Running the Bot**
+
+Once the environment variables are set, you can start the bot with the following command:
+
+```bash
+julezz bot start
+```
+
+The bot will start listening for commands.
+
+**Commands**
+
+-   `/help`: Shows a list of all available commands.
+-   `/list`: Displays all your active Jules sessions. The output will show the session ID and title for each session.
+-   `/send <session_id> <message>`: Sends a message to a specific session.
+    -   `<session_id>`: The full ID of the session you want to send a message to (you can get this from the `/list` command).
+    -   `<message>`: The text you want to send.
+
+    *Example*:
+    ```
+    /send 1234567890abcdef Hello, can you help me with a new feature?
+    ```
+
 ## Alias System
 
 The alias system allows you to assign a memorable name to a session ID. This is particularly useful when you are working with multiple sessions, as it saves you from having to remember or look up session IDs.
