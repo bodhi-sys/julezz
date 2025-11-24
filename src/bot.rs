@@ -46,15 +46,21 @@ async fn answer(
     cmd: Command,
     client: Arc<Mutex<Option<JulesClient>>>,
     cache: Arc<Cache>,
+    server_api_key: Arc<String>,
 ) -> ResponseResult<()> {
     match cmd {
         Command::Help => {
             bot.send_message(msg.chat.id, Command::descriptions().to_string()).await?;
         }
         Command::Auth(api_key) => {
-            let mut client_guard = client.lock().await;
-            *client_guard = Some(JulesClient::new(Some(api_key)).expect("Failed to create JulesClient"));
-            bot.send_message(msg.chat.id, "Authentication successful!").await?;
+            if api_key == *server_api_key {
+                let mut client_guard = client.lock().await;
+                *client_guard =
+                    Some(JulesClient::new(Some(api_key)).expect("Failed to create JulesClient"));
+                bot.send_message(msg.chat.id, "Authentication successful!").await?;
+            } else {
+                bot.send_message(msg.chat.id, "Authentication failed: Invalid API key.").await?;
+            }
         }
         Command::List => {
             if let Some(client) = &*client.lock().await {
@@ -133,6 +139,7 @@ pub async fn start_bot() {
     pretty_env_logger::init();
     log::info!("Starting command bot...");
 
+    let server_api_key = env::var("JULES_API_KEY").expect("JULES_API_KEY must be set");
     let client: Arc<Mutex<Option<JulesClient>>> = Arc::new(Mutex::new(None));
 
     let bot = Bot::from_env();
@@ -202,7 +209,7 @@ pub async fn start_bot() {
         .branch(dptree::entry().filter_command::<Command>().endpoint(answer));
 
     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![client, cache])
+        .dependencies(dptree::deps![client, cache, Arc::new(server_api_key)])
         .enable_ctrlc_handler()
         .build()
         .dispatch()

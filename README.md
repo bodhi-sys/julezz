@@ -78,12 +78,14 @@ Julezz includes a Telegram bot for interacting with your sessions in a conversat
 1.  **Create a Telegram Bot**: Talk to the [BotFather](https://t.me/botfather) on Telegram to create a new bot. You will receive a token; keep it safe.
 2.  **Find Your Chat ID**: Talk to the `@userinfobot` on Telegram to find your user ID. This will be your chat ID.
 3.  **Set Environment Variables**: The bot requires the following environment variables to be set:
+    *   `JULES_API_KEY`: Your Google API key for the Jules API. This is the key the bot will use to authenticate with the Jules API.
     *   `TELOXIDE_TOKEN`: The token you received from the BotFather.
     *   `TELEGRAM_CHAT_ID`: Your chat ID, which the bot will use to send you notifications.
     *   `JULEZZ_POLL_INTERVAL_SECONDS` (optional): The interval in seconds at which the bot checks for new messages. Defaults to 30.
 
     You can set these in your shell or create a `.env` file in the project's root directory:
     ```
+    JULES_API_KEY=your-api-key
     TELOXIDE_TOKEN=your-telegram-bot-token
     TELEGRAM_CHAT_ID=your-chat-id
     JULEZZ_POLL_INTERVAL_SECONDS=30
