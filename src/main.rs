@@ -19,6 +19,7 @@ use colored::Colorize;
 use julezz::api::{handle_error, JulesClient};
 use std::io;
 
+mod bot;
 mod cache;
 use cache::{Cache, CachedSession};
 
@@ -114,6 +115,11 @@ enum Commands {
     Activities {
         #[command(subcommand)]
         command: ActivitiesCommands,
+    },
+    /// Start the Telegram bot
+    Bot {
+        #[command(subcommand)]
+        command: BotCommands,
     },
     /// Generate shell completions
     Completions {
@@ -222,6 +228,12 @@ enum ActivitiesCommands {
         /// The ID of the activity to get
         id: String,
     },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum BotCommands {
+    /// Start the bot
+    Start,
 }
 
 #[tokio::main]
@@ -428,6 +440,11 @@ async fn main() {
                         eprintln!("{} {}", "Error:".red(), e);
                     }
                 }
+            }
+        },
+        Commands::Bot { command } => match command {
+            BotCommands::Start => {
+                bot::start_bot().await;
             }
         },
         Commands::Completions { shell } => {
