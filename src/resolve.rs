@@ -1,20 +1,25 @@
 // src/resolve.rs
 
+use crate::api::Session;
 use crate::cache::Cache;
 
-pub fn resolve_session_identifier(identifier: &str) -> Result<String, String> {
-    resolve_session_identifier_and_index(identifier).map(|(id, _index)| id)
+pub fn resolve_session_identifier(
+    identifier: &str,
+    sessions: &[Session],
+) -> Result<String, String> {
+    resolve_session_identifier_and_index(identifier, sessions).map(|(id, _index)| id)
 }
 
-pub fn resolve_session_identifier_and_index(identifier: &str) -> Result<(String, usize), String> {
-    let cache = Cache::new()?;
-    let sessions = cache.read_sessions()?;
-
+pub fn resolve_session_identifier_and_index(
+    identifier: &str,
+    sessions: &[Session],
+) -> Result<(String, usize), String> {
     if sessions.is_empty() {
-        return Err("No sessions found in cache. Run `sessions list` to refresh.".to_string());
+        return Err("No sessions found.".to_string());
     }
 
     if identifier.starts_with('@') {
+        let cache = Cache::new()?;
         let aliases = cache.read_aliases()?;
         let session_id = aliases
             .get(identifier)
@@ -26,7 +31,7 @@ pub fn resolve_session_identifier_and_index(identifier: &str) -> Result<(String,
             .map(|index| (session_id.clone(), index + 1))
             .ok_or_else(|| {
                 format!(
-                    "Session ID '{}' for alias '{}' not found in cache. Run `sessions list`.",
+                    "Session ID '{}' for alias '{}' not found.",
                     session_id, identifier
                 )
             })
@@ -40,10 +45,7 @@ pub fn resolve_session_identifier_and_index(identifier: &str) -> Result<(String,
             return sessions
                 .get(index - 1)
                 .map(|session| (session.id.clone(), index))
-                .ok_or_else(|| {
-                    "Session index out of bounds. Run `sessions list` to see available sessions."
-                        .to_string()
-                });
+                .ok_or_else(|| "Session index out of bounds.".to_string());
         }
 
         // If it's not an alias and not a valid index, assume it's a session ID
@@ -51,11 +53,6 @@ pub fn resolve_session_identifier_and_index(identifier: &str) -> Result<(String,
             .iter()
             .position(|s| s.id == identifier)
             .map(|index| (identifier.to_string(), index + 1))
-            .ok_or_else(|| {
-                format!(
-                    "Session ID '{}' not found in cache. Run `sessions list`.",
-                    identifier
-                )
-            })
+            .ok_or_else(|| format!("Session ID '{}' not found.", identifier))
     }
 }

@@ -106,20 +106,28 @@ async fn answer(
                 if parts.len() == 2 {
                     let identifier = parts[0];
                     let prompt = parts[1];
-                    match resolve_session_identifier(identifier) {
-                        Ok(session_id) => {
-                            match client.send_message(&session_id, prompt).await {
-                                Ok(_) => {
-                                    bot.send_message(msg.chat.id, "Message sent successfully!").await?;
+                    match client.list_sessions().await {
+                        Ok(sessions) => {
+                            match resolve_session_identifier(identifier, &sessions) {
+                                Ok(session_id) => {
+                                    match client.send_message(&session_id, prompt).await {
+                                        Ok(_) => {
+                                            bot.send_message(msg.chat.id, "Message sent successfully!").await?;
+                                        }
+                                        Err(e) => {
+                                            log::error!("Failed to send message: {:?}", e);
+                                            bot.send_message(msg.chat.id, "Sorry, something went wrong while sending your message.").await?;
+                                        }
+                                    }
                                 }
                                 Err(e) => {
-                                    log::error!("Failed to send message: {:?}", e);
-                                    bot.send_message(msg.chat.id, "Sorry, something went wrong while sending your message.").await?;
+                                    bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
                                 }
                             }
                         }
                         Err(e) => {
-                            bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
+                            log::error!("Failed to list sessions: {:?}", e);
+                            bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sessions.").await?;
                         }
                     }
                 } else {
@@ -186,11 +194,26 @@ pub async fn start_bot() {
                         let last_seen_activity_id = last_activities.get(&session.id).cloned();
 
                         if last_seen_activity_id.as_deref() != Some(&last_activity.id) {
-                            if let Some(agent_messaged) = &last_activity.agent_messaged {
-                                let message = format!(
+                            let notification_message = if let Some(agent_messaged) = &last_activity.agent_messaged {
+                                Some(format!(
                                     "New message in session *{}*:\n{}",
                                     session.title, escape_markdown_v2(&agent_messaged.agent_message)
-                                );
+                                ))
+                            } else if last_activity.plan_generated.is_some() {
+                                Some(format!("Plan generated for session *{}*.", session.title))
+                            } else if let Some(progress) = &last_activity.progress_updated {
+                                Some(format!(
+                                    "Progress update for session *{}*:\n{}",
+                                    session.title,
+                                    escape_markdown_v2(progress.title.as_deref().unwrap_or("No title"))
+                                ))
+                            } else if last_activity.artifacts.is_some() {
+                                Some(format!("New artifacts generated for session *{}*.", session.title))
+                            } else {
+                                None
+                            };
+
+                            if let Some(message) = notification_message {
                                 if let Err(e) = bot_for_task.send_message(chat_id, &message).parse_mode(ParseMode::MarkdownV2).await {
                                     log::error!("Failed to send notification: {:?}", e);
                                 }

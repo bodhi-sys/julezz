@@ -21,6 +21,7 @@ use std::io;
 
 mod bot;
 use julezz::cache::{Cache, CachedSession};
+use julezz::api::Session;
 use julezz::resolve::{resolve_session_identifier, resolve_session_identifier_and_index};
 
 /// A cool CLI for Google Jules
@@ -251,7 +252,19 @@ async fn main() {
                 }
             }
             SessionsCommands::Get { index } => {
-                match resolve_session_identifier(&index) {
+                let cache = Cache::new().unwrap();
+                let sessions = cache.read_sessions().unwrap();
+                let api_sessions: Vec<Session> = sessions
+                    .into_iter()
+                    .map(|s| Session {
+                        name: s.title.clone(),
+                        id: s.id,
+                        state: None,
+                        title: s.title,
+                        source_context: s.source_context,
+                    })
+                    .collect();
+                match resolve_session_identifier(&index, &api_sessions) {
                     Ok(session_id) => {
                         match client.get_session(&session_id).await {
                             Ok(session) => {
@@ -269,7 +282,19 @@ async fn main() {
                 }
             }
             SessionsCommands::ApprovePlan { index } => {
-                match resolve_session_identifier(&index) {
+                let cache = Cache::new().unwrap();
+                let sessions = cache.read_sessions().unwrap();
+                let api_sessions: Vec<Session> = sessions
+                    .into_iter()
+                    .map(|s| Session {
+                        name: s.title.clone(),
+                        id: s.id,
+                        state: None,
+                        title: s.title,
+                        source_context: s.source_context,
+                    })
+                    .collect();
+                match resolve_session_identifier(&index, &api_sessions) {
                     Ok(session_id) => {
                         if let Err(e) = client.approve_plan(&session_id).await {
                             handle_error(e);
@@ -281,7 +306,19 @@ async fn main() {
                 }
             }
             SessionsCommands::Delete { index } => {
-                match resolve_session_identifier_and_index(&index) {
+                let cache = Cache::new().unwrap();
+                let sessions = cache.read_sessions().unwrap();
+                let api_sessions: Vec<Session> = sessions
+                    .into_iter()
+                    .map(|s| Session {
+                        name: s.title.clone(),
+                        id: s.id,
+                        state: None,
+                        title: s.title,
+                        source_context: s.source_context,
+                    })
+                    .collect();
+                match resolve_session_identifier_and_index(&index, &api_sessions) {
                     Ok((session_id, session_index)) => {
                         match client.delete_session(&session_id).await {
                             Ok(_) => {
@@ -302,7 +339,19 @@ async fn main() {
                 }
             }
             SessionsCommands::SendMessage { index, prompt } => {
-                match resolve_session_identifier(&index) {
+                let cache = Cache::new().unwrap();
+                let sessions = cache.read_sessions().unwrap();
+                let api_sessions: Vec<Session> = sessions
+                    .into_iter()
+                    .map(|s| Session {
+                        name: s.title.clone(),
+                        id: s.id,
+                        state: None,
+                        title: s.title,
+                        source_context: s.source_context,
+                    })
+                    .collect();
+                match resolve_session_identifier(&index, &api_sessions) {
                     Ok(session_id) => {
                         if let Err(e) = client.send_message(&session_id, &prompt).await {
                             handle_error(e);
@@ -316,10 +365,22 @@ async fn main() {
         },
         Commands::Activities { command } => match command {
             ActivitiesCommands::Fetch { index } => {
-                match resolve_session_identifier_and_index(&index) {
+                let cache = Cache::new().unwrap();
+                let sessions = cache.read_sessions().unwrap();
+                let api_sessions: Vec<Session> = sessions
+                    .clone()
+                    .into_iter()
+                    .map(|s| Session {
+                        name: s.title.clone(),
+                        id: s.id,
+                        state: None,
+                        title: s.title,
+                        source_context: s.source_context,
+                    })
+                    .collect();
+                match resolve_session_identifier_and_index(&index, &api_sessions) {
                     Ok((session_id, session_index)) => {
-                        let cache = Cache::new().unwrap();
-                        let session = cache.read_sessions().unwrap().remove(session_index - 1);
+                        let session = sessions.into_iter().nth(session_index - 1).unwrap();
                         match client.fetch_activities(&session_id).await {
                             Ok(activities) => {
                                 print_activities(&activities, activities.len(), &session);
@@ -335,10 +396,22 @@ async fn main() {
                 }
             }
             ActivitiesCommands::List { index, n, r } => {
-                match resolve_session_identifier_and_index(&index) {
+                let cache = Cache::new().unwrap();
+                let sessions = cache.read_sessions().unwrap();
+                let api_sessions: Vec<Session> = sessions
+                    .clone()
+                    .into_iter()
+                    .map(|s| Session {
+                        name: s.title.clone(),
+                        id: s.id,
+                        state: None,
+                        title: s.title,
+                        source_context: s.source_context,
+                    })
+                    .collect();
+                match resolve_session_identifier_and_index(&index, &api_sessions) {
                     Ok((session_id, session_index)) => {
-                        let cache = Cache::new().unwrap();
-                        let session = cache.read_sessions().unwrap().remove(session_index - 1);
+                        let session = sessions.into_iter().nth(session_index - 1).unwrap();
                         let activities_result = if r {
                             client.fetch_activities(&session_id).await
                         } else {
@@ -360,7 +433,19 @@ async fn main() {
                 }
             }
             ActivitiesCommands::Get { index, id } => {
-                match resolve_session_identifier(&index) {
+                let cache = Cache::new().unwrap();
+                let sessions = cache.read_sessions().unwrap();
+                let api_sessions: Vec<Session> = sessions
+                    .into_iter()
+                    .map(|s| Session {
+                        name: s.title.clone(),
+                        id: s.id,
+                        state: None,
+                        title: s.title,
+                        source_context: s.source_context,
+                    })
+                    .collect();
+                match resolve_session_identifier(&index, &api_sessions) {
                     Ok(session_id) => {
                         match client.get_activity(&session_id, &id).await {
                             Ok(activity) => {
@@ -600,7 +685,19 @@ fn manage_aliases(
         }
     } else if let (Some(alias_name), Some(number)) = (alias, session_number) {
         if alias_name.starts_with('@') {
-            let (session_id, _) = resolve_session_identifier_and_index(&number.to_string())?;
+            let sessions = cache.read_sessions()?;
+            let api_sessions: Vec<Session> = sessions
+                .into_iter()
+                .map(|s| Session {
+                    name: s.title.clone(),
+                    id: s.id,
+                    state: None,
+                    title: s.title,
+                    source_context: s.source_context,
+                })
+                .collect();
+            let (session_id, _) =
+                resolve_session_identifier_and_index(&number.to_string(), &api_sessions)?;
             aliases.insert(alias_name.clone(), session_id.clone());
             cache.write_aliases(&aliases)?;
             println!(
