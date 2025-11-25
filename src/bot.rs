@@ -38,8 +38,6 @@ enum Command {
     Send(String),
     #[command(description = "authenticate with your Jules API key.")]
     Auth(String),
-    #[command(description = "get your Telegram chat ID.")]
-    Whoami,
 }
 
 async fn answer(
@@ -60,13 +58,20 @@ async fn answer(
                 *client_guard =
                     Some(JulesClient::new(Some(api_key)).expect("Failed to create JulesClient"));
                 bot.send_message(msg.chat.id, "Authentication successful!").await?;
+
+                if cache.read_chat_id().unwrap().is_none() {
+                    cache
+                        .write_chat_id(&msg.chat.id.to_string())
+                        .expect("Failed to write chat ID");
+                    bot.send_message(
+                        msg.chat.id,
+                        "Your chat ID has been saved as the owner.",
+                    )
+                    .await?;
+                }
             } else {
                 bot.send_message(msg.chat.id, "Authentication failed: Invalid API key.").await?;
             }
-        }
-        Command::Whoami => {
-            bot.send_message(msg.chat.id, format!("Your chat ID is: `{}`", msg.chat.id))
-                .await?;
         }
         Command::List => {
             if let Some(client) = &*client.lock().await {
@@ -158,13 +163,13 @@ pub async fn start_bot() {
 
     let bot = Bot::from_env();
 
-    let chat_id = env::var("TELEGRAM_CHAT_ID").expect("TELEGRAM_CHAT_ID must be set");
-    let chat_id = ChatId(chat_id.parse().expect("TELEGRAM_CHAT_ID must be an integer"));
     let last_activities = Arc::new(Mutex::new(HashMap::<String, String>::new()));
 
+    let cache = Arc::new(Cache::new().expect("Failed to create cache"));
     let bot_for_task = bot.clone();
     let client_for_task = client.clone();
     let last_activities_for_task = last_activities.clone();
+    let cache_for_task = cache.clone();
 
     let poll_interval_seconds = env::var("JULEZZ_POLL_INTERVAL_SECONDS")
         .unwrap_or_else(|_| "30".to_string())
@@ -177,8 +182,10 @@ pub async fn start_bot() {
             interval.tick().await;
 
             if let Some(client) = &*client_for_task.lock().await {
-                log::info!("Checking for new activities...");
-                let sessions = match client.list_sessions().await {
+                if let Ok(Some(chat_id_str)) = cache_for_task.read_chat_id() {
+                    let chat_id = ChatId(chat_id_str.parse().expect("Chat ID must be an integer"));
+                    log::info!("Checking for new activities...");
+                    let sessions = match client.list_sessions().await {
                     Ok(sessions) => sessions,
                     Err(e) => {
                         log::error!("Failed to list sessions for activity check: {:?}", e);
@@ -237,9 +244,8 @@ pub async fn start_bot() {
                 }
             }
         }
+        }
     });
-
-    let cache = Arc::new(Cache::new().expect("Failed to create cache"));
 
     let handler = Update::filter_message()
         .branch(dptree::entry().filter_command::<Command>().endpoint(answer));

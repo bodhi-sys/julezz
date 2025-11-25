@@ -55,6 +55,8 @@ pub struct Cache {
     sessions_file: PathBuf,
     /// The path to the aliases cache file.
     aliases_file: PathBuf,
+    /// The path to the chat ID cache file.
+    chat_id_file: PathBuf,
 }
 
 impl Cache {
@@ -77,6 +79,7 @@ impl Cache {
         Ok(Self {
             sessions_file: julezz_dir.join("sessions.json"),
             aliases_file: julezz_dir.join("aliases.json"),
+            chat_id_file: julezz_dir.join("chat_id.txt"),
         })
     }
 
@@ -139,5 +142,30 @@ impl Cache {
             .map_err(|e| format!("Could not serialize aliases: {}", e))?;
         fs::write(&self.aliases_file, json)
             .map_err(|e| format!("Could not write aliases file: {}", e))
+    }
+
+    /// Reads the chat ID from the cache file.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the chat ID as a string, or `None` if the file
+    /// does not exist.
+    pub fn read_chat_id(&self) -> Result<Option<String>, String> {
+        if !self.chat_id_file.exists() {
+            return Ok(None);
+        }
+        fs::read_to_string(&self.chat_id_file)
+            .map(Some)
+            .map_err(|e| format!("Could not read chat ID file: {}", e))
+    }
+
+    /// Writes the given chat ID to the cache file.
+    ///
+    /// # Arguments
+    ///
+    /// * `chat_id` - The chat ID to write to the cache.
+    pub fn write_chat_id(&self, chat_id: &str) -> Result<(), String> {
+        fs::write(&self.chat_id_file, chat_id)
+            .map_err(|e| format!("Could not write chat ID file: {}", e))
     }
 }

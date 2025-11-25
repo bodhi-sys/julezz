@@ -76,18 +76,15 @@ Julezz includes a Telegram bot for interacting with your sessions in a conversat
 **Setup**
 
 1.  **Create a Telegram Bot**: Talk to the [BotFather](https://t.me/botfather) on Telegram to create a new bot. You will receive a token; keep it safe.
-2.  **Set Environment Variables**: The bot requires the `JULES_API_KEY` and `TELOXIDE_TOKEN` environment variables to be set. You can find your chat ID in the next step.
-3.  **Find Your Chat ID**: Start the bot and send it the `/whoami` command. The bot will reply with your chat ID. Add this ID to your environment variables as `TELEGRAM_CHAT_ID`.
+2.  **Set Environment Variables**: The bot requires the following environment variables to be set:
     *   `JULES_API_KEY`: Your Google API key for the Jules API. This is the key the bot will use to authenticate with the Jules API.
     *   `TELOXIDE_TOKEN`: The token you received from the BotFather.
-    *   `TELEGRAM_CHAT_ID`: Your chat ID, which the bot will use to send you notifications.
     *   `JULEZZ_POLL_INTERVAL_SECONDS` (optional): The interval in seconds at which the bot checks for new messages. Defaults to 30.
 
     You can set these in your shell or create a `.env` file in the project's root directory:
     ```
     JULES_API_KEY=your-api-key
     TELOXIDE_TOKEN=your-telegram-bot-token
-    TELEGRAM_CHAT_ID=your-chat-id
     JULEZZ_POLL_INTERVAL_SECONDS=30
     ```
 
@@ -103,9 +100,8 @@ The bot will start listening for commands.
 
 **Commands**
 
--   `/auth <api_key>`: Authenticates the bot with your Jules API key. This must be done before any other commands can be used.
+-   `/auth <api_key>`: Authenticates the bot with your Jules API key. This must be done before any other commands can be used. On the first successful authentication, your chat will be saved as the owner for receiving notifications.
 -   `/help`: Shows a list of all available commands.
--   `/whoami`: Replies with your Telegram chat ID, which you can use for the `TELEGRAM_CHAT_ID` environment variable.
 -   `/list`: Displays all your active Jules sessions. The output will show the session ID and title for each session.
 -   `/send <identifier> <message>`: Sends a message to a specific session.
     -   `<identifier>`: The session's ID, alias (e.g., `@my-session`), or numeric index from the `julezz sessions list` command.
