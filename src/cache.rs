@@ -1,3 +1,4 @@
+use crate::api;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -35,7 +36,7 @@ pub struct CachedSession {
     pub title: String,
     /// The source context of the session.
     #[serde(rename = "sourceContext")]
-    pub source_context: Option<julezz::api::SourceContext>,
+    pub source_context: Option<api::SourceContext>,
 }
 
 /// A type alias for a map of aliases to their corresponding session IDs.
@@ -54,6 +55,10 @@ pub struct Cache {
     sessions_file: PathBuf,
     /// The path to the aliases cache file.
     aliases_file: PathBuf,
+    /// The path to the chat ID cache file.
+    chat_id_file: PathBuf,
+    /// The path to the current session cache file.
+    current_session_file: PathBuf,
 }
 
 impl Cache {
@@ -76,6 +81,8 @@ impl Cache {
         Ok(Self {
             sessions_file: julezz_dir.join("sessions.json"),
             aliases_file: julezz_dir.join("aliases.json"),
+            chat_id_file: julezz_dir.join("chat_id.txt"),
+            current_session_file: julezz_dir.join("current_session.txt"),
         })
     }
 
@@ -138,5 +145,55 @@ impl Cache {
             .map_err(|e| format!("Could not serialize aliases: {}", e))?;
         fs::write(&self.aliases_file, json)
             .map_err(|e| format!("Could not write aliases file: {}", e))
+    }
+
+    /// Reads the chat ID from the cache file.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the chat ID as a string, or `None` if the file
+    /// does not exist.
+    pub fn read_chat_id(&self) -> Result<Option<String>, String> {
+        if !self.chat_id_file.exists() {
+            return Ok(None);
+        }
+        fs::read_to_string(&self.chat_id_file)
+            .map(Some)
+            .map_err(|e| format!("Could not read chat ID file: {}", e))
+    }
+
+    /// Writes the given chat ID to the cache file.
+    ///
+    /// # Arguments
+    ///
+    /// * `chat_id` - The chat ID to write to the cache.
+    pub fn write_chat_id(&self, chat_id: &str) -> Result<(), String> {
+        fs::write(&self.chat_id_file, chat_id)
+            .map_err(|e| format!("Could not write chat ID file: {}", e))
+    }
+
+    /// Reads the current session ID from the cache file.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the current session ID as a string, or `None` if
+    /// the file does not exist.
+    pub fn read_current_session(&self) -> Result<Option<String>, String> {
+        if !self.current_session_file.exists() {
+            return Ok(None);
+        }
+        fs::read_to_string(&self.current_session_file)
+            .map(Some)
+            .map_err(|e| format!("Could not read current session file: {}", e))
+    }
+
+    /// Writes the given session ID to the current session cache file.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - The session ID to write to the cache.
+    pub fn write_current_session(&self, session_id: &str) -> Result<(), String> {
+        fs::write(&self.current_session_file, session_id)
+            .map_err(|e| format!("Could not write current session file: {}", e))
     }
 }
