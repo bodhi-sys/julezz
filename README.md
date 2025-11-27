@@ -69,6 +69,49 @@ Here is a brief overview of the available commands. For more detailed informatio
 -   **List Sources**: `julezz sources list`
     -   Lists all available sources that you can use to create new sessions.
 
+### Telegram Bot
+
+Julezz includes a Telegram bot for interacting with your sessions in a conversational way. The bot can also send you notifications when there are new messages from the agent.
+
+**Setup**
+
+1.  **Create a Telegram Bot**: Talk to the [BotFather](https://t.me/botfather) on Telegram to create a new bot. You will receive a token; keep it safe.
+2.  **Set Environment Variables**: The bot requires the following environment variables to be set:
+    *   `JULES_API_KEY`: Your Google API key for the Jules API. This is the key the bot will use to authenticate with the Jules API.
+    *   `TELOXIDE_TOKEN`: The token you received from the BotFather.
+    *   `JULEZZ_POLL_INTERVAL_SECONDS` (optional): The interval in seconds at which the bot checks for new messages. Defaults to 30.
+
+    You can set these in your shell or create a `.env` file in the project's root directory:
+    ```
+    JULES_API_KEY=your-api-key
+    TELOXIDE_TOKEN=your-telegram-bot-token
+    JULEZZ_POLL_INTERVAL_SECONDS=30
+    ```
+
+**Running the Bot**
+
+Once the environment variables are set, you can start the bot with the following command:
+
+```bash
+julezz bot start
+```
+
+The bot will start listening for commands.
+
+**Commands**
+
+-   `/auth <api_key>`: Authenticates the bot with your Jules API key. This must be done before any other commands can be used. On the first successful authentication, your chat will be saved as the owner for receiving notifications.
+-   `/help`: Shows a list of all available commands.
+-   `/list`: Displays all your active Jules sessions.
+-   `/s <identifier>`: Switches the current session. All messages sent without a command will be directed to this session.
+-   `/ok`: Approves the plan for the current session.
+-   `/alias @<alias_name> <identifier>`: Creates an alias for a session.
+-   `/send <identifier> <message>`: Sends a message to a specific session.
+
+**Default Behavior**
+
+Once you have set a current session with the `/s` command, you can send messages to it directly without using the `/send` command. For example, if your current session is set to `@my-session`, sending `Hello` will be the same as sending `/send @my-session Hello`.
+
 ## Alias System
 
 The alias system allows you to assign a memorable name to a session ID. This is particularly useful when you are working with multiple sessions, as it saves you from having to remember or look up session IDs.
