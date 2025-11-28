@@ -40,10 +40,22 @@ enum Command {
     Auth(String),
     #[command(description = "switch current session.")]
     S(String),
-    #[command(description = "approve plan for the current session.")]
-    Ok,
-    #[command(description = "create an alias for a session. Usage: /alias @<alias_name> <session_id_or_alias>")]
+    #[command(description = "approve a plan. Usage: /ok [session_id_or_alias]")]
+    Ok(String),
+    #[command(description = "create or list aliases. Usage: /alias [@<alias_name> <session_id_or_alias>]")]
     Alias(String),
+    #[command(description = "delete an alias. Usage: /unalias @<alias_name>")]
+    Unalias(String),
+    #[command(description = "delete a session. Usage: /delete <session_id_or_alias>")]
+    Delete(String),
+    #[command(description = "list activities for a session. Usage: /activities <session_id_or_alias>")]
+    Activities(String),
+    #[command(description = "list available sources.")]
+    Src,
+    #[command(description = "create a new session. Usage: /new --source <source> --branch <branch> <title>")]
+    New(String),
+    #[command(description = "get a session by identifier. Usage: /get <session_id_or_alias>")]
+    Get(String),
 }
 
 async fn answer(
@@ -162,50 +174,276 @@ async fn answer(
                 bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
             }
         }
-        Command::Alias(text) => {
+        Command::Get(identifier) => {
             if let Some(client) = &*client.lock().await {
-                let parts: Vec<&str> = text.splitn(2, ' ').collect();
-                if parts.len() == 2 {
-                    let alias_name = parts[0];
-                    let identifier = parts[1];
-
-                    if !alias_name.starts_with('@') {
-                        bot.send_message(msg.chat.id, "Alias must start with '@'").await?;
-                        return Ok(());
-                    }
-
-                    match client.list_sessions().await {
-                        Ok(sessions) => {
-                            match resolve_session_identifier(identifier, &sessions) {
-                                Ok(session_id) => {
-                                    let mut aliases = match cache.read_aliases() {
-                                        Ok(aliases) => aliases,
-                                        Err(e) => {
-                                            log::error!("Failed to read aliases: {:?}", e);
-                                            bot.send_message(msg.chat.id, "Sorry, something went wrong while reading your aliases.").await?;
-                                            return Ok(());
-                                        }
-                                    };
-                                    aliases.insert(alias_name.to_string(), session_id.clone());
-                                    if let Err(e) = cache.write_aliases(&aliases) {
-                                        log::error!("Failed to write aliases: {:?}", e);
-                                        bot.send_message(msg.chat.id, "Sorry, something went wrong while saving your alias.").await?;
-                                    } else {
-                                        bot.send_message(msg.chat.id, format!("Alias '{}' created for session {}", alias_name, session_id)).await?;
+                match client.list_sessions().await {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&identifier, &sessions) {
+                            Ok(session_id) => {
+                                match client.get_session(&session_id).await {
+                                    Ok(session) => {
+                                        let response = format!("Session details:\n- ID: {}\n- Title: {}\n- State: {}", session.id, session.title, session.state.unwrap_or_default());
+                                        bot.send_message(msg.chat.id, response).await?;
+                                    }
+                                    Err(e) => {
+                                        log::error!("Failed to get session: {:?}", e);
+                                        bot.send_message(msg.chat.id, "Sorry, something went wrong while getting the session.").await?;
                                     }
                                 }
-                                Err(e) => {
-                                    bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
-                                }
+                            }
+                            Err(e) => {
+                                bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
                             }
                         }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to list sessions: {:?}", e);
+                        bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sessions.").await?;
+                    }
+                }
+            } else {
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            }
+        }
+        Command::New(text) => {
+            if let Some(client) = &*client.lock().await {
+                let mut source = None;
+                let mut branch = "main".to_string();
+                let mut title = None;
+
+                let parts: Vec<&str> = text.split_whitespace().collect();
+                let mut i = 0;
+                while i < parts.len() {
+                    match parts[i] {
+                        "--source" => {
+                            if i + 1 < parts.len() {
+                                source = Some(parts[i + 1].to_string());
+                                i += 2;
+                            } else {
+                                bot.send_message(msg.chat.id, "Missing value for --source").await?;
+                                return Ok(());
+                            }
+                        }
+                        "--branch" => {
+                            if i + 1 < parts.len() {
+                                branch = parts[i + 1].to_string();
+                                i += 2;
+                            } else {
+                                bot.send_message(msg.chat.id, "Missing value for --branch").await?;
+                                return Ok(());
+                            }
+                        }
+                        _ => {
+                            title = Some(parts[i..].join(" "));
+                            break;
+                        }
+                    }
+                }
+
+                if let (Some(source), Some(title)) = (source, title) {
+                    match client.create_session(&source, &title, true, &branch).await {
+                        Ok(session) => {
+                            bot.send_message(msg.chat.id, format!("Session created: {} ({})", session.id, session.title)).await?;
+                        }
                         Err(e) => {
-                            log::error!("Failed to list sessions: {:?}", e);
-                            bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sessions.").await?;
+                            log::error!("Failed to create session: {:?}", e);
+                            bot.send_message(msg.chat.id, "Sorry, something went wrong while creating the session.").await?;
                         }
                     }
                 } else {
-                    bot.send_message(msg.chat.id, "Invalid format. Use: /alias @<alias_name> <session_id_or_alias>").await?;
+                    bot.send_message(msg.chat.id, "Invalid format. Usage: /create --source <source> --branch <branch> <title>").await?;
+                }
+            } else {
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            }
+        }
+        Command::Src => {
+            if let Some(client) = &*client.lock().await {
+                match client.list_sources().await {
+                    Ok(sources) => {
+                        let mut response = String::from("Available sources:\n");
+                        for source in sources {
+                            response.push_str(&format!("- {}\n", source.name));
+                        }
+                        bot.send_message(msg.chat.id, response).await?;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to list sources: {:?}", e);
+                        bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sources.").await?;
+                    }
+                }
+            } else {
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            }
+        }
+        Command::Activities(identifier) => {
+            if let Some(client) = &*client.lock().await {
+                match client.list_sessions().await {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&identifier, &sessions) {
+                            Ok(session_id) => {
+                                match client.fetch_activities(&session_id).await {
+                                    Ok(activities) => {
+                                        let response = format_activities(&activities, 5, &session_id);
+                                        bot.send_message(msg.chat.id, response).await?;
+                                    }
+                                    Err(e) => {
+                                        log::error!("Failed to fetch activities: {:?}", e);
+                                        bot.send_message(msg.chat.id, "Sorry, something went wrong while fetching activities.").await?;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to list sessions: {:?}", e);
+                        bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sessions.").await?;
+                    }
+                }
+            } else {
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            }
+        }
+        Command::Delete(identifier) => {
+            if let Some(client) = &*client.lock().await {
+                match client.list_sessions().await {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&identifier, &sessions) {
+                            Ok(session_id) => {
+                                match client.delete_session(&session_id).await {
+                                    Ok(_) => {
+                                        // Update cache and aliases
+                                        let mut cached_sessions = cache.read_sessions().unwrap_or_default();
+                                        cached_sessions.retain(|s| s.id != session_id);
+                                        cache.write_sessions(&cached_sessions).unwrap_or_default();
+
+                                        let mut aliases = cache.read_aliases().unwrap_or_default();
+                                        aliases.retain(|_, s_id| *s_id != session_id);
+                                        cache.write_aliases(&aliases).unwrap_or_default();
+
+                                        bot.send_message(msg.chat.id, format!("Session {} deleted.", session_id)).await?;
+                                    }
+                                    Err(e) => {
+                                        log::error!("Failed to delete session: {:?}", e);
+                                        bot.send_message(msg.chat.id, "Sorry, something went wrong while deleting the session.").await?;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to list sessions: {:?}", e);
+                        bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sessions.").await?;
+                    }
+                }
+            } else {
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            }
+        }
+        Command::Alias(text) => {
+            if client.lock().await.is_some() {
+                if text.is_empty() {
+                    // List aliases
+                    match cache.read_aliases() {
+                        Ok(aliases) => {
+                            if aliases.is_empty() {
+                                bot.send_message(msg.chat.id, "No aliases found.").await?;
+                            } else {
+                                let mut response = String::from("Aliases:\n");
+                                for (alias, session_id) in aliases {
+                                    response.push_str(&format!("- {} -> {}\n", alias, session_id));
+                                }
+                                bot.send_message(msg.chat.id, response).await?;
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Failed to read aliases: {:?}", e);
+                            bot.send_message(msg.chat.id, "Sorry, something went wrong while reading your aliases.").await?;
+                        }
+                    }
+                } else {
+                    let parts: Vec<&str> = text.splitn(2, ' ').collect();
+                    if parts.len() == 2 {
+                        let alias_name = parts[0];
+                        let identifier = parts[1];
+
+                        if !alias_name.starts_with('@') {
+                            bot.send_message(msg.chat.id, "Alias must start with '@'").await?;
+                            return Ok(());
+                        }
+
+                        let client_guard = client.lock().await;
+                        let client = client_guard.as_ref().unwrap();
+
+                        match client.list_sessions().await {
+                            Ok(sessions) => {
+                                match resolve_session_identifier(identifier, &sessions) {
+                                    Ok(session_id) => {
+                                        let mut aliases = match cache.read_aliases() {
+                                            Ok(aliases) => aliases,
+                                            Err(e) => {
+                                                log::error!("Failed to read aliases: {:?}", e);
+                                                bot.send_message(msg.chat.id, "Sorry, something went wrong while reading your aliases.").await?;
+                                                return Ok(());
+                                            }
+                                        };
+                                        aliases.insert(alias_name.to_string(), session_id.clone());
+                                        if let Err(e) = cache.write_aliases(&aliases) {
+                                            log::error!("Failed to write aliases: {:?}", e);
+                                            bot.send_message(msg.chat.id, "Sorry, something went wrong while saving your alias.").await?;
+                                        } else {
+                                            bot.send_message(msg.chat.id, format!("Alias '{}' created for session {}", alias_name, session_id)).await?;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Failed to list sessions: {:?}", e);
+                                bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sessions.").await?;
+                            }
+                        }
+                    } else {
+                        bot.send_message(msg.chat.id, "Invalid format. Use: /alias @<alias_name> <session_id_or_alias>").await?;
+                    }
+                }
+            } else {
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            }
+        }
+        Command::Unalias(alias_name) => {
+            if client.lock().await.is_some() {
+                if !alias_name.starts_with('@') {
+                    bot.send_message(msg.chat.id, "Alias must start with '@'").await?;
+                    return Ok(());
+                }
+
+                let mut aliases = match cache.read_aliases() {
+                    Ok(aliases) => aliases,
+                    Err(e) => {
+                        log::error!("Failed to read aliases: {:?}", e);
+                        bot.send_message(msg.chat.id, "Sorry, something went wrong while reading your aliases.").await?;
+                        return Ok(());
+                    }
+                };
+
+                if aliases.remove(&alias_name).is_some() {
+                    if let Err(e) = cache.write_aliases(&aliases) {
+                        log::error!("Failed to write aliases: {:?}", e);
+                        bot.send_message(msg.chat.id, "Sorry, something went wrong while deleting your alias.").await?;
+                    } else {
+                        bot.send_message(msg.chat.id, format!("Alias '{}' deleted.", alias_name)).await?;
+                    }
+                } else {
+                    bot.send_message(msg.chat.id, format!("Alias '{}' not found.", alias_name)).await?;
                 }
             } else {
                 bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
@@ -275,9 +513,19 @@ async fn answer(
                 bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
             }
         }
-        Command::Ok => {
+
+        Command::Ok(identifier) => {
             if let Some(client) = &*client.lock().await {
-                match cache.read_current_session() {
+                let session_id_result = if identifier.is_empty() {
+                    cache.read_current_session()
+                } else {
+                    match client.list_sessions().await {
+                        Ok(sessions) => resolve_session_identifier(&identifier, &sessions).map(Some),
+                        Err(e) => Err(e.to_string()),
+                    }
+                };
+
+                match session_id_result {
                     Ok(Some(session_id)) => {
                         match client.approve_plan(&session_id).await {
                             Ok(_) => {
@@ -290,11 +538,11 @@ async fn answer(
                         }
                     }
                     Ok(None) => {
-                        bot.send_message(msg.chat.id, "No current session is set. Use /s <session_id_or_alias> to set one.").await?;
+
+                         bot.send_message(msg.chat.id, "No current session is set. Use /s <session_id_or_alias> to set one, or provide an identifier.").await?;
                     }
                     Err(e) => {
-                        log::error!("Failed to read current session: {:?}", e);
-                        bot.send_message(msg.chat.id, "Sorry, something went wrong while reading the current session.").await?;
+                        bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
                     }
                 }
             } else {
@@ -304,6 +552,60 @@ async fn answer(
     };
 
     Ok(())
+}
+
+
+fn format_activities(activities: &[julezz::api::Activity], n: usize, session_id: &str) -> String {
+    let mut response = format!("Activities for session {}:\n\n", session_id);
+    let mut activities = activities.to_vec();
+    activities.sort_by(|a, b| a.create_time.cmp(&b.create_time));
+    let activities_to_show = activities.iter().rev().take(n).rev();
+
+    for activity in activities_to_show {
+        response.push_str(&format!("[{}] {}\n", activity.create_time, activity.originator));
+
+        if let Some(agent_messaged) = &activity.agent_messaged {
+            if !agent_messaged.agent_message.is_empty() {
+                response.push_str(&format!("  {}\n", agent_messaged.agent_message));
+            }
+        } else if let Some(user_messaged) = &activity.user_messaged {
+            response.push_str(&format!("  {}\n", user_messaged.user_message));
+        } else if let Some(plan_generated) = &activity.plan_generated {
+            response.push_str("  Plan Generated\n");
+            for step in &plan_generated.plan.steps {
+                response.push_str(&format!("    - {}\n", step.title));
+            }
+        } else if activity.plan_approved.is_some() {
+            response.push_str("  Plan Approved\n");
+        } else if activity.session_completed.is_some() {
+            response.push_str("  Session Completed\n");
+        } else if let Some(progress) = &activity.progress_updated {
+            if let Some(title) = &progress.title {
+                response.push_str(&format!("  {}\n", title));
+            }
+            if let Some(description) = &progress.description {
+                response.push_str(&format!("    {}\n", description));
+            }
+        } else if let Some(artifacts) = &activity.artifacts {
+            for artifact in artifacts {
+                if let Some(bash_output) = &artifact.bash_output {
+                    response.push_str(&format!("  $ {}\n", bash_output.command));
+                    response.push_str(&format!("    {}\n", bash_output.output));
+                }
+                if let Some(change_set) = &artifact.change_set {
+                    response.push_str("  Code Change\n");
+                    if let Some(patch) = &change_set.git_patch.unidiff_patch {
+                        response.push_str(&format!("{}\n", patch));
+                    }
+                }
+            }
+        } else if let Some(title) = &activity.title {
+            response.push_str(&format!("  {}\n", title));
+        }
+
+        response.push('\n');
+    }
+    response
 }
 
 async fn default_message_handler(

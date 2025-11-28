@@ -103,9 +103,16 @@ The bot will start listening for commands.
 -   `/auth <api_key>`: Authenticates the bot with your Jules API key. This must be done before any other commands can be used. On the first successful authentication, your chat will be saved as the owner for receiving notifications.
 -   `/help`: Shows a list of all available commands.
 -   `/list`: Displays all your active Jules sessions.
+-   `/src`: Lists all available sources.
+-   `/new --source <source> --branch <branch> <title>`: Creates a new session.
+-   `/get <identifier>`: Gets details for a session.
 -   `/s <identifier>`: Switches the current session. All messages sent without a command will be directed to this session.
--   `/ok`: Approves the plan for the current session.
+-   `/ok [identifier]`: Approves the plan for the specified or current session.
+-   `/alias`: Lists all aliases.
 -   `/alias @<alias_name> <identifier>`: Creates an alias for a session.
+-   `/unalias @<alias_name>`: Deletes an alias.
+-   `/delete <identifier>`: Deletes a session.
+-   `/activities <identifier>`: Lists the most recent activities for a session.
 -   `/send <identifier> <message>`: Sends a message to a specific session.
 
 **Default Behavior**
