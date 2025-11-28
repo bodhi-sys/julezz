@@ -19,6 +19,7 @@
 
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fs;
 
 const API_BASE_URL: &str = "https://jules.googleapis.com/v1alpha";
@@ -191,6 +192,16 @@ pub enum JulesError {
     ApiKeyMissing,
     ReqwestError(reqwest::Error),
     ApiError(String),
+}
+
+impl fmt::Display for JulesError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            JulesError::ApiKeyMissing => write!(f, "API key is missing."),
+            JulesError::ReqwestError(e) => write!(f, "Request error: {}", e),
+            JulesError::ApiError(e) => write!(f, "API error: {}", e),
+        }
+    }
 }
 
 impl From<reqwest::Error> for JulesError {

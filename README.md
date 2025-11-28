@@ -69,6 +69,58 @@ Here is a brief overview of the available commands. For more detailed informatio
 -   **List Sources**: `julezz sources list`
     -   Lists all available sources that you can use to create new sessions.
 
+### Telegram Bot
+
+Julezz includes a Telegram bot for interacting with your sessions in a conversational way. The bot can also send you notifications when there are new messages from the agent.
+
+**Setup**
+
+1.  **Create a Telegram Bot**: Talk to the [BotFather](https://t.me/botfather) on Telegram to create a new bot. You will receive a token; keep it safe.
+2.  **Set Environment Variables**: The bot requires the following environment variables to be set:
+    *   `JULES_API_KEY`: Your Google API key for the Jules API. This is the key the bot will use to authenticate with the Jules API.
+    *   `TELOXIDE_TOKEN`: The token you received from the BotFather.
+    *   `JULEZZ_POLL_INTERVAL_SECONDS` (optional): The interval in seconds at which the bot checks for new messages. Defaults to 30.
+
+    You can set these in your shell or create a `.env` file in the project's root directory:
+    ```
+    JULES_API_KEY=your-api-key
+    TELOXIDE_TOKEN=your-telegram-bot-token
+    JULEZZ_POLL_INTERVAL_SECONDS=30
+    ```
+
+**Running the Bot**
+
+Once the environment variables are set, you can start the bot with the following command:
+
+```bash
+julezz bot start
+```
+
+The bot will start listening for commands.
+
+**Commands**
+
+-   `/auth <api_key>`: Authenticates the bot with your Jules API key. This must be done before any other commands can be used. On the first successful authentication, your chat will be saved as the owner for receiving notifications.
+-   `/help`: Shows a list of all available commands.
+-   `/list`: Displays all your active Jules sessions.
+-   `/src`: Lists all available sources.
+-   `/new --source <source> --branch <branch> <title>`: Creates a new session.
+-   `/get <identifier>`: Gets details for a session.
+-   `/s <identifier>`: Switches the current session. All messages sent without a command will be directed to this session.
+-   `/ok [identifier]`: Approves the plan for the specified or current session.
+-   `/alias`: Lists all aliases.
+-   `/alias @<alias_name> <identifier>`: Creates an alias for a session.
+-   `/unalias @<alias_name>`: Deletes an alias.
+-   `/delete <identifier>`: Deletes a session.
+-   `/activities <identifier>`: Lists the most recent activities for a session.
+
+**Sending Messages**
+
+You can send messages to sessions in two ways:
+
+1.  **To a specific session**: Use the format `<identifier>: <message>`. For example: `@my-session: Hello, can you help me?`
+2.  **To the current session**: Simply send the message text. The message will be sent to the session you've set with the `/s` command.
+
 ## Alias System
 
 The alias system allows you to assign a memorable name to a session ID. This is particularly useful when you are working with multiple sessions, as it saves you from having to remember or look up session IDs.
