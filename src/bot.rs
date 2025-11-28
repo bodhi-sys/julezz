@@ -513,6 +513,7 @@ async fn answer(
                 bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
             }
         }
+
         Command::Ok(identifier) => {
             if let Some(client) = &*client.lock().await {
                 let session_id_result = if identifier.is_empty() {
@@ -537,6 +538,7 @@ async fn answer(
                         }
                     }
                     Ok(None) => {
+
                          bot.send_message(msg.chat.id, "No current session is set. Use /s <session_id_or_alias> to set one, or provide an identifier.").await?;
                     }
                     Err(e) => {
@@ -551,6 +553,7 @@ async fn answer(
 
     Ok(())
 }
+
 
 fn format_activities(activities: &[julezz::api::Activity], n: usize, session_id: &str) -> String {
     let mut response = format!("Activities for session {}:\n\n", session_id);
