@@ -34,6 +34,7 @@ fn get_sessions_from_cache() -> Result<Vec<Session>, String> {
             state: None,
             title: s.title,
             source_context: s.source_context,
+            pull_request_url: s.pull_request_url,
         })
         .collect();
     Ok(api_sessions)
@@ -151,6 +152,11 @@ enum SessionsCommands {
     /// Delete a session by index
     Delete {
         /// The index of the session to delete
+        index: String,
+    },
+    /// Merge the pull request for a session by index
+    Merge {
+        /// The index of the session to merge the pull request for
         index: String,
     },
 }
@@ -282,6 +288,35 @@ async fn main() {
                                     Err(e) => {
                                         handle_error(e);
                                     }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("{} {}", "Error:".red(), e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{} {}", "Error:".red(), e);
+                    }
+                }
+            }
+            SessionsCommands::Merge { index } => {
+                match get_sessions_from_cache() {
+                    Ok(sessions) => {
+                        match resolve_session_identifier_and_index(&index, &sessions) {
+                            Ok((_session_id, session_index)) => {
+                                if let Some(session) = sessions.get(session_index - 1) {
+                                    if let Some(pull_request_url) = &session.pull_request_url {
+                                        if let Err(e) = client.merge_pull_request(pull_request_url) {
+                                            handle_error(e);
+                                        } else {
+                                            println!("Pull request merged successfully!");
+                                        }
+                                    } else {
+                                        eprintln!("{} {}", "Error:".red(), "No pull request URL found for this session.");
+                                    }
+                                } else {
+                                    eprintln!("{} {}", "Error:".red(), "Invalid session index.");
                                 }
                             }
                             Err(e) => {
@@ -498,6 +533,7 @@ fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), S
                 id: session.id.clone(),
                 title: session.title.clone(),
                 source_context: session.source_context.clone(),
+                pull_request_url: session.pull_request_url.clone(),
             });
         }
     }
@@ -640,6 +676,7 @@ fn add_alias_for_new_session(
         id: session.id.clone(),
         title: session.title.clone(),
         source_context: session.source_context.clone(),
+        pull_request_url: session.pull_request_url.clone(),
     });
     cache.write_sessions(&sessions)?;
 
