@@ -56,6 +56,8 @@ enum Command {
     New(String),
     #[command(description = "get a session by identifier. Usage: /get <session_id_or_alias>")]
     Get(String),
+    #[command(description = "merge the pull request for a session. Usage: /merge <session_id_or_alias>")]
+    Merge(String),
 }
 
 async fn answer(
@@ -133,6 +135,7 @@ async fn answer(
                                     id: session.id.clone(),
                                     title: session.title.clone(),
                                     source_context: session.source_context.clone(),
+                                    pull_request_url: session.pull_request_url.clone(),
                                 });
                             }
                         }
@@ -543,6 +546,42 @@ async fn answer(
                     }
                     Err(e) => {
                         bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
+                    }
+                }
+            } else {
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            }
+        }
+        Command::Merge(identifier) => {
+            if let Some(client) = &*client.lock().await {
+                match client.list_sessions().await {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&identifier, &sessions) {
+                            Ok(session_id) => {
+                                let session = sessions.iter().find(|s| s.id == session_id);
+                                if let Some(session) = session {
+                                    if let Some(pull_request_url) = &session.pull_request_url {
+                                        if let Err(e) = client.merge_pull_request(pull_request_url) {
+                                            log::error!("Failed to merge pull request: {:?}", e);
+                                            bot.send_message(msg.chat.id, "Sorry, something went wrong while merging the pull request.").await?;
+                                        } else {
+                                            bot.send_message(msg.chat.id, "Pull request merged successfully!").await?;
+                                        }
+                                    } else {
+                                        bot.send_message(msg.chat.id, "No pull request URL found for this session.").await?;
+                                    }
+                                } else {
+                                    bot.send_message(msg.chat.id, "Session not found.").await?;
+                                }
+                            }
+                            Err(e) => {
+                                bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to list sessions: {:?}", e);
+                        bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sessions.").await?;
                     }
                 }
             } else {
