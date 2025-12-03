@@ -301,11 +301,11 @@ async fn main() {
                 }
             }
             SessionsCommands::Merge { index } => {
-                match get_sessions_from_cache() {
+                match client.list_sessions().await {
                     Ok(sessions) => {
-                        match resolve_session_identifier_and_index(&index, &sessions) {
-                            Ok((_session_id, session_index)) => {
-                                if let Some(session) = sessions.get(session_index - 1) {
+                        match resolve_session_identifier(&index, &sessions) {
+                            Ok(session_id) => {
+                                if let Some(session) = sessions.iter().find(|s| s.id == session_id) {
                                     if let Some(pull_request_url) = &session.pull_request_url {
                                         if let Err(e) = client.merge_pull_request(pull_request_url) {
                                             handle_error(e);
@@ -316,7 +316,8 @@ async fn main() {
                                         eprintln!("{} {}", "Error:".red(), "No pull request URL found for this session.");
                                     }
                                 } else {
-                                    eprintln!("{} {}", "Error:".red(), "Invalid session index.");
+                                    // This case should ideally not be reached if resolve_session_identifier works correctly
+                                    eprintln!("{} {}", "Error:".red(), "Session not found after resolving identifier.");
                                 }
                             }
                             Err(e) => {
@@ -325,7 +326,7 @@ async fn main() {
                         }
                     }
                     Err(e) => {
-                        eprintln!("{} {}", "Error:".red(), e);
+                        handle_error(e);
                     }
                 }
             }
@@ -519,24 +520,15 @@ async fn main() {
 /// and adds any new sessions from the server to the cache.
 fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), String> {
     let cache = Cache::new()?;
-    let mut cached_sessions = cache.read_sessions()?;
-
-    let live_session_ids: std::collections::HashSet<_> =
-        sessions_list.iter().map(|s| s.id.as_str()).collect();
-    cached_sessions.retain(|cs| live_session_ids.contains(cs.id.as_str()));
-
-    let cached_session_ids: std::collections::HashSet<_> =
-        cached_sessions.iter().map(|cs| cs.id.clone()).collect();
-    for session in sessions_list.iter() {
-        if !cached_session_ids.contains(&session.id) {
-            cached_sessions.push(CachedSession {
-                id: session.id.clone(),
-                title: session.title.clone(),
-                source_context: session.source_context.clone(),
-                pull_request_url: session.pull_request_url.clone(),
-            });
-        }
-    }
+    let cached_sessions: Vec<CachedSession> = sessions_list
+        .iter()
+        .map(|session| CachedSession {
+            id: session.id.clone(),
+            title: session.title.clone(),
+            source_context: session.source_context.clone(),
+            pull_request_url: session.pull_request_url.clone(),
+        })
+        .collect();
 
     cache.write_sessions(&cached_sessions)?;
 

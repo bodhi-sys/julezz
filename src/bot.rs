@@ -115,30 +115,15 @@ async fn answer(
             if let Some(client) = &*client.lock().await {
                 match client.list_sessions().await {
                     Ok(sessions_list) => {
-                        let mut cached_sessions = match cache.read_sessions() {
-                            Ok(sessions) => sessions,
-                            Err(e) => {
-                                log::error!("Failed to read cached sessions: {:?}", e);
-                                vec![]
-                            }
-                        };
-
-                        let live_session_ids: std::collections::HashSet<_> =
-                            sessions_list.iter().map(|s| s.id.as_str()).collect();
-                        cached_sessions.retain(|cs| live_session_ids.contains(cs.id.as_str()));
-
-                        let cached_session_ids: std::collections::HashSet<_> =
-                            cached_sessions.iter().map(|cs| cs.id.clone()).collect();
-                        for session in sessions_list.iter() {
-                            if !cached_session_ids.contains(&session.id) {
-                                cached_sessions.push(CachedSession {
-                                    id: session.id.clone(),
-                                    title: session.title.clone(),
-                                    source_context: session.source_context.clone(),
-                                    pull_request_url: session.pull_request_url.clone(),
-                                });
-                            }
-                        }
+                        let cached_sessions: Vec<CachedSession> = sessions_list
+                            .iter()
+                            .map(|session| CachedSession {
+                                id: session.id.clone(),
+                                title: session.title.clone(),
+                                source_context: session.source_context.clone(),
+                                pull_request_url: session.pull_request_url.clone(),
+                            })
+                            .collect();
 
                         if let Err(e) = cache.write_sessions(&cached_sessions) {
                             log::error!("Failed to write sessions to cache: {:?}", e);
