@@ -639,29 +639,49 @@ async fn default_message_handler(
     cache: Arc<Cache>,
 ) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
+        if text.starts_with('/') {
+            bot.send_message(
+                msg.chat.id,
+                "Unknown command. Try /help to see the list of available commands.",
+            )
+            .await?;
+            return Ok(());
+        }
+
         if let Some(client) = &*client.lock().await {
             match cache.read_current_session() {
                 Ok(Some(session_id)) => {
-                    match client.send_message(&session_id, text).await {
-                        Ok(_) => {
-                            // Do not send a confirmation message to keep the chat clean
-                        }
-                        Err(e) => {
-                            log::error!("Failed to send message: {:?}", e);
-                            bot.send_message(msg.chat.id, "Sorry, something went wrong while sending your message.").await?;
-                        }
+                    if let Err(e) = client.send_message(&session_id, text).await {
+                        log::error!("Failed to send message: {:?}", e);
+                        bot.send_message(
+                            msg.chat.id,
+                            "Sorry, something went wrong while sending your message.",
+                        )
+                        .await?;
                     }
                 }
                 Ok(None) => {
-                    bot.send_message(msg.chat.id, "No current session is set. Use /s <session_id_or_alias> to set one.").await?;
+                    bot.send_message(
+                        msg.chat.id,
+                        "No current session is set. Use /s <session_id_or_alias> to set one.",
+                    )
+                    .await?;
                 }
                 Err(e) => {
                     log::error!("Failed to read current session: {:?}", e);
-                    bot.send_message(msg.chat.id, "Sorry, something went wrong while reading the current session.").await?;
+                    bot.send_message(
+                        msg.chat.id,
+                        "Sorry, something went wrong while reading the current session.",
+                    )
+                    .await?;
                 }
             }
         } else {
-            bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            bot.send_message(
+                msg.chat.id,
+                "You are not authenticated. Please use the `/auth` command to provide your API key.",
+            )
+            .await?;
         }
     }
     Ok(())
