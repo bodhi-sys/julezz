@@ -56,6 +56,8 @@ enum Command {
     New(String),
     #[command(description = "get a session by identifier. Usage: /get <session_id_or_alias>")]
     Get(String),
+    #[command(description = "merge the pull request for a session. Usage: /merge <session_id_or_alias>")]
+    Merge(String),
 }
 
 async fn answer(
@@ -113,29 +115,15 @@ async fn answer(
             if let Some(client) = &*client.lock().await {
                 match client.list_sessions().await {
                     Ok(sessions_list) => {
-                        let mut cached_sessions = match cache.read_sessions() {
-                            Ok(sessions) => sessions,
-                            Err(e) => {
-                                log::error!("Failed to read cached sessions: {:?}", e);
-                                vec![]
-                            }
-                        };
-
-                        let live_session_ids: std::collections::HashSet<_> =
-                            sessions_list.iter().map(|s| s.id.as_str()).collect();
-                        cached_sessions.retain(|cs| live_session_ids.contains(cs.id.as_str()));
-
-                        let cached_session_ids: std::collections::HashSet<_> =
-                            cached_sessions.iter().map(|cs| cs.id.clone()).collect();
-                        for session in sessions_list.iter() {
-                            if !cached_session_ids.contains(&session.id) {
-                                cached_sessions.push(CachedSession {
-                                    id: session.id.clone(),
-                                    title: session.title.clone(),
-                                    source_context: session.source_context.clone(),
-                                });
-                            }
-                        }
+                        let cached_sessions: Vec<CachedSession> = sessions_list
+                            .iter()
+                            .map(|session| CachedSession {
+                                id: session.id.clone(),
+                                title: session.title.clone(),
+                                source_context: session.source_context.clone(),
+                                pull_request_url: session.pull_request_url.clone(),
+                            })
+                            .collect();
 
                         if let Err(e) = cache.write_sessions(&cached_sessions) {
                             log::error!("Failed to write sessions to cache: {:?}", e);
@@ -549,6 +537,42 @@ async fn answer(
                 bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
             }
         }
+        Command::Merge(identifier) => {
+            if let Some(client) = &*client.lock().await {
+                match client.list_sessions().await {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&identifier, &sessions) {
+                            Ok(session_id) => {
+                                let session = sessions.iter().find(|s| s.id == session_id);
+                                if let Some(session) = session {
+                                    if let Some(pull_request_url) = &session.pull_request_url {
+                                        if let Err(e) = client.merge_pull_request(pull_request_url) {
+                                            log::error!("Failed to merge pull request: {:?}", e);
+                                            bot.send_message(msg.chat.id, "Sorry, something went wrong while merging the pull request.").await?;
+                                        } else {
+                                            bot.send_message(msg.chat.id, "Pull request merged successfully!").await?;
+                                        }
+                                    } else {
+                                        bot.send_message(msg.chat.id, "No pull request URL found for this session.").await?;
+                                    }
+                                } else {
+                                    bot.send_message(msg.chat.id, "Session not found.").await?;
+                                }
+                            }
+                            Err(e) => {
+                                bot.send_message(msg.chat.id, format!("Error: {}", e)).await?;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to list sessions: {:?}", e);
+                        bot.send_message(msg.chat.id, "Sorry, something went wrong while listing the sessions.").await?;
+                    }
+                }
+            } else {
+                bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            }
+        }
     };
 
     Ok(())
@@ -615,29 +639,49 @@ async fn default_message_handler(
     cache: Arc<Cache>,
 ) -> ResponseResult<()> {
     if let Some(text) = msg.text() {
+        if text.starts_with('/') {
+            bot.send_message(
+                msg.chat.id,
+                "Unknown command. Try /help to see the list of available commands.",
+            )
+            .await?;
+            return Ok(());
+        }
+
         if let Some(client) = &*client.lock().await {
             match cache.read_current_session() {
                 Ok(Some(session_id)) => {
-                    match client.send_message(&session_id, text).await {
-                        Ok(_) => {
-                            // Do not send a confirmation message to keep the chat clean
-                        }
-                        Err(e) => {
-                            log::error!("Failed to send message: {:?}", e);
-                            bot.send_message(msg.chat.id, "Sorry, something went wrong while sending your message.").await?;
-                        }
+                    if let Err(e) = client.send_message(&session_id, text).await {
+                        log::error!("Failed to send message: {:?}", e);
+                        bot.send_message(
+                            msg.chat.id,
+                            "Sorry, something went wrong while sending your message.",
+                        )
+                        .await?;
                     }
                 }
                 Ok(None) => {
-                    bot.send_message(msg.chat.id, "No current session is set. Use /s <session_id_or_alias> to set one.").await?;
+                    bot.send_message(
+                        msg.chat.id,
+                        "No current session is set. Use /s <session_id_or_alias> to set one.",
+                    )
+                    .await?;
                 }
                 Err(e) => {
                     log::error!("Failed to read current session: {:?}", e);
-                    bot.send_message(msg.chat.id, "Sorry, something went wrong while reading the current session.").await?;
+                    bot.send_message(
+                        msg.chat.id,
+                        "Sorry, something went wrong while reading the current session.",
+                    )
+                    .await?;
                 }
             }
         } else {
-            bot.send_message(msg.chat.id, "You are not authenticated. Please use the `/auth` command to provide your API key.").await?;
+            bot.send_message(
+                msg.chat.id,
+                "You are not authenticated. Please use the `/auth` command to provide your API key.",
+            )
+            .await?;
         }
     }
     Ok(())
