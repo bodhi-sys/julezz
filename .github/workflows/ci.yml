@@ -10,9 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
+  build_and_test:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v3
 
@@ -33,6 +32,7 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
+      id: build
       run: cargo build --verbose
 
     - name: Run tests
@@ -45,8 +45,49 @@ jobs:
           exit 1
         fi
 
-    - name: Notify on failure
+    - name: Upload test log
       if: failure() && steps.tests.outcome == 'failure'
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-log
+        path: test_output.log
+
+  notify_on_failure:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    if: failure()
+
+    steps:
+    - name: Checkout main branch
+      uses: actions/checkout@v3
+      with:
+        ref: main
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build julezz from main
+      run: cargo build --verbose
+
+    - name: Download test log
+      uses: actions/download-artifact@v3
+      with:
+        name: test-log
+
+    - name: Notify on failure
       run: |
         echo "Tests failed. Preparing to notify the binded session."
         FAILURE_LOG=$(cat test_output.log)
