@@ -37,6 +37,9 @@ pub struct CachedSession {
     /// The source context of the session.
     #[serde(rename = "sourceContext")]
     pub source_context: Option<api::SourceContext>,
+    /// The URL of the pull request.
+    #[serde(rename = "pullRequestUrl")]
+    pub pull_request_url: Option<String>,
 }
 
 /// A type alias for a map of aliases to their corresponding session IDs.

@@ -34,6 +34,7 @@ fn get_sessions_from_cache() -> Result<Vec<Session>, String> {
             state: None,
             title: s.title,
             source_context: s.source_context,
+            pull_request_url: s.pull_request_url,
         })
         .collect();
     Ok(api_sessions)
@@ -151,6 +152,11 @@ enum SessionsCommands {
     /// Delete a session by index
     Delete {
         /// The index of the session to delete
+        index: String,
+    },
+    /// Merge the pull request for a session by index
+    Merge {
+        /// The index of the session to merge the pull request for
         index: String,
     },
 }
@@ -291,6 +297,36 @@ async fn main() {
                     }
                     Err(e) => {
                         eprintln!("{} {}", "Error:".red(), e);
+                    }
+                }
+            }
+            SessionsCommands::Merge { index } => {
+                match client.list_sessions().await {
+                    Ok(sessions) => {
+                        match resolve_session_identifier(&index, &sessions) {
+                            Ok(session_id) => {
+                                if let Some(session) = sessions.iter().find(|s| s.id == session_id) {
+                                    if let Some(pull_request_url) = &session.pull_request_url {
+                                        if let Err(e) = client.merge_pull_request(pull_request_url).await {
+                                            handle_error(e);
+                                        } else {
+                                            println!("Pull request merged successfully!");
+                                        }
+                                    } else {
+                                        eprintln!("{} {}", "Error:".red(), "No pull request URL found for this session.");
+                                    }
+                                } else {
+                                    // This case should ideally not be reached if resolve_session_identifier works correctly
+                                    eprintln!("{} {}", "Error:".red(), "Session not found after resolving identifier.");
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("{} {}", "Error:".red(), e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        handle_error(e);
                     }
                 }
             }
@@ -484,23 +520,15 @@ async fn main() {
 /// and adds any new sessions from the server to the cache.
 fn manage_sessions_cache(sessions_list: &[julezz::api::Session]) -> Result<(), String> {
     let cache = Cache::new()?;
-    let mut cached_sessions = cache.read_sessions()?;
-
-    let live_session_ids: std::collections::HashSet<_> =
-        sessions_list.iter().map(|s| s.id.as_str()).collect();
-    cached_sessions.retain(|cs| live_session_ids.contains(cs.id.as_str()));
-
-    let cached_session_ids: std::collections::HashSet<_> =
-        cached_sessions.iter().map(|cs| cs.id.clone()).collect();
-    for session in sessions_list.iter() {
-        if !cached_session_ids.contains(&session.id) {
-            cached_sessions.push(CachedSession {
-                id: session.id.clone(),
-                title: session.title.clone(),
-                source_context: session.source_context.clone(),
-            });
-        }
-    }
+    let cached_sessions: Vec<CachedSession> = sessions_list
+        .iter()
+        .map(|session| CachedSession {
+            id: session.id.clone(),
+            title: session.title.clone(),
+            source_context: session.source_context.clone(),
+            pull_request_url: session.pull_request_url.clone(),
+        })
+        .collect();
 
     cache.write_sessions(&cached_sessions)?;
 
@@ -640,6 +668,7 @@ fn add_alias_for_new_session(
         id: session.id.clone(),
         title: session.title.clone(),
         source_context: session.source_context.clone(),
+        pull_request_url: session.pull_request_url.clone(),
     });
     cache.write_sessions(&sessions)?;
 

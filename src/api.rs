@@ -21,6 +21,7 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
+use tokio::process::Command;
 
 const API_BASE_URL: &str = "https://jules.googleapis.com/v1alpha";
 
@@ -61,6 +62,8 @@ pub struct Session {
     pub title: String,
     #[serde(rename = "sourceContext")]
     pub source_context: Option<SourceContext>,
+    #[serde(rename = "pullRequestUrl")]
+    pub pull_request_url: Option<String>,
 }
 
 /// Represents the response from the `list_sessions` endpoint.
@@ -529,6 +532,26 @@ impl JulesClient {
             .send()
             .await?;
         self.handle_response(response).await
+    }
+
+    /// Merges the pull request for a session.
+    pub async fn merge_pull_request(&self, pull_request_url: &str) -> Result<(), JulesError> {
+        let output = Command::new("gh")
+            .arg("pr")
+            .arg("merge")
+            .arg(pull_request_url)
+            .output()
+            .await
+            .map_err(|e| JulesError::ApiError(format!("Failed to execute gh command: {}", e)))?;
+
+        if !output.status.success() {
+            return Err(JulesError::ApiError(format!(
+                "Failed to merge pull request: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+
+        Ok(())
     }
 }
 
