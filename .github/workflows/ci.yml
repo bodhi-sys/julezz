@@ -16,7 +16,7 @@ jobs:
       tests_failed: ${{ steps.tests.outcome == 'failure' }}
     steps:
     - name: Checkout Project
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
@@ -24,7 +24,7 @@ jobs:
         toolchain: stable
 
     - name: Cache dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/bin/
@@ -44,7 +44,7 @@ jobs:
 
     - name: Upload test log on failure
       if: steps.tests.outcome == 'failure'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-log
         path: test_output.log
@@ -57,7 +57,7 @@ jobs:
     steps:
     # This step checks out a stable version of the julezz CLI from its own repository.
     - name: Checkout julezz CLI from main branch
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: julezz-ai/julezz
         path: julezz-cli
@@ -69,7 +69,7 @@ jobs:
         toolchain: stable
 
     - name: Cache julezz dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: julezz-cli/target
         key: ${{ runner.os }}-cargo-julezz-${{ hashFiles('julezz-cli/Cargo.lock') }}
@@ -78,7 +78,7 @@ jobs:
       run: cargo build --verbose --manifest-path julezz-cli/Cargo.toml
 
     - name: Download test log
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: test-log
 
@@ -88,4 +88,4 @@ jobs:
         MESSAGE="CI tests failed in repository ${{ github.repository }}. Please address the following errors:\n\n${FAILURE_LOG}"
         ./julezz-cli/target/debug/julezz sessions send-message "${{ secrets.JULEZZ_SESSION_ID }}" "$MESSAGE"
       env:
-        JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+        JULEZZ_API_KEY: ${{ secrets.JULES_API_KEY }}
