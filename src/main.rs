@@ -307,7 +307,7 @@ async fn main() {
                             Ok(session_id) => {
                                 if let Some(session) = sessions.iter().find(|s| s.id == session_id) {
                                     if let Some(pull_request_url) = &session.pull_request_url {
-                                        if let Err(e) = client.merge_pull_request(pull_request_url).await {
+                                        if let Err(e) = client.merge_pull_request(pull_request_url) {
                                             handle_error(e);
                                         } else {
                                             println!("Pull request merged successfully!");

@@ -546,7 +546,7 @@ async fn answer(
                                 let session = sessions.iter().find(|s| s.id == session_id);
                                 if let Some(session) = session {
                                     if let Some(pull_request_url) = &session.pull_request_url {
-                                        if let Err(e) = client.merge_pull_request(pull_request_url).await {
+                                        if let Err(e) = client.merge_pull_request(pull_request_url) {
                                             log::error!("Failed to merge pull request: {:?}", e);
                                             bot.send_message(msg.chat.id, "Sorry, something went wrong while merging the pull request.").await?;
                                         } else {

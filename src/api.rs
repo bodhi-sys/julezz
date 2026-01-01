@@ -21,7 +21,7 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
-use tokio::process::Command;
+use std::process::Command;
 
 const API_BASE_URL: &str = "https://jules.googleapis.com/v1alpha";
 
@@ -535,13 +535,12 @@ impl JulesClient {
     }
 
     /// Merges the pull request for a session.
-    pub async fn merge_pull_request(&self, pull_request_url: &str) -> Result<(), JulesError> {
+    pub fn merge_pull_request(&self, pull_request_url: &str) -> Result<(), JulesError> {
         let output = Command::new("gh")
             .arg("pr")
             .arg("merge")
             .arg(pull_request_url)
             .output()
-            .await
             .map_err(|e| JulesError::ApiError(format!("Failed to execute gh command: {}", e)))?;
 
         if !output.status.success() {
