@@ -57,37 +57,23 @@ jobs:
     if: needs.build_and_test.outputs.tests_failed == 'true'
 
     steps:
-    # This step checks out a stable version of the julezz CLI from its own repository.
-    - name: Checkout julezz CLI from main branch
-      uses: actions/checkout@v4
-      with:
-        repository: julezz-ai/julezz
-        path: julezz-cli
-        ref: main
-
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-
-    - name: Cache julezz dependencies
-      uses: actions/cache@v4
-      with:
-        path: julezz-cli/target
-        key: ${{ runner.os }}-cargo-julezz-${{ hashFiles('julezz-cli/Cargo.lock') }}
-
-    - name: Build julezz from main
-      run: cargo build --verbose --manifest-path julezz-cli/Cargo.toml
-
     - name: Download test log
       uses: actions/download-artifact@v4
       with:
         name: test-log
 
-    - name: Send notification
+    - name: Install jq
+      run: sudo apt-get update && sudo apt-get install -y jq
+
+    - name: Send Notification via curl
       run: |
         FAILURE_LOG=$(cat test_output.log)
         MESSAGE="CI tests failed in repository ${{ github.repository }}. Please address the following errors:\n\n${FAILURE_LOG}"
-        ./julezz-cli/target/debug/julezz sessions send-message "${{ secrets.JULEZZ_SESSION_ID }}" "$MESSAGE"
+        JSON_PAYLOAD=$(jq -n --arg msg "$MESSAGE" '{"prompt": $msg}')
+        curl -X POST \
+          -H "Content-Type: application/json" \
+          -H "x-goog-api-key: ${{ secrets.JULES_API_KEY }}" \
+          -d "$JSON_PAYLOAD" \
+          "https://jules.googleapis.com/v1alpha/sessions/${{ secrets.JULEZZ_SESSION_ID }}:sendMessage"
       env:
         JULEZZ_API_KEY: ${{ secrets.JULES_API_KEY }}
