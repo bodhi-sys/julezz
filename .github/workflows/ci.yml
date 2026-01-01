@@ -1,0 +1,93 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    outputs:
+      tests_failed: ${{ steps.test_and_check.outputs.failed }}
+    steps:
+    - name: Checkout Project
+      uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build
+      run: cargo build --verbose
+
+    - name: Run Tests and Check for Failure
+      id: test_and_check
+      run: |
+        if ! cargo test --verbose > test_output.log 2>&1; then
+          echo "failed=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Upload test log on failure
+      if: steps.test_and_check.outputs.failed == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-log
+        path: test_output.log
+
+  notify_on_failure:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    if: needs.build_and_test.outputs.tests_failed == 'true'
+
+    steps:
+    # This step checks out a stable version of the julezz CLI from its own repository.
+    - name: Checkout julezz CLI from main branch
+      uses: actions/checkout@v4
+      with:
+        repository: julezz-ai/julezz
+        path: julezz-cli
+        ref: main
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Cache julezz dependencies
+      uses: actions/cache@v4
+      with:
+        path: julezz-cli/target
+        key: ${{ runner.os }}-cargo-julezz-${{ hashFiles('julezz-cli/Cargo.lock') }}
+
+    - name: Build julezz from main
+      run: cargo build --verbose --manifest-path julezz-cli/Cargo.toml
+
+    - name: Download test log
+      uses: actions/download-artifact@v4
+      with:
+        name: test-log
+
+    - name: Send notification
+      run: |
+        FAILURE_LOG=$(cat test_output.log)
+        MESSAGE="CI tests failed in repository ${{ github.repository }}. Please address the following errors:\n\n${FAILURE_LOG}"
+        ./julezz-cli/target/debug/julezz sessions send-message "${{ secrets.JULEZZ_SESSION_ID }}" "$MESSAGE"
+      env:
+        JULEZZ_API_KEY: ${{ secrets.JULES_API_KEY }}
